@@ -2,7 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { supabase } = require('../config/supabase');
+const { supabase } = require('backend/config/supabase');
 const { verifyToken } = require('../middleware/auth');
 const auditService = require('../services/auditService');
 
