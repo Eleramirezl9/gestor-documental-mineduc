@@ -126,3 +126,7 @@ build/Release
 
 .env
 backend/.env
+
+# Añade estas líneas
+frontend/vercel.json
+frontend/gestor-documental-frontend/
