@@ -105,7 +105,7 @@ RATE_LIMIT_MAX_REQUESTS=100
 
 1. Clic en "Create Web Service"
 2. Espera a que termine el despliegue (5-10 minutos)
-3. Anota la URL: `https://tu-backend.onrender.com`
+3. Anota la URL: `https://gestor-documental-mineduc-backend.onrender.com`
 
 ## 🌐 Paso 3: Desplegar Frontend en Vercel
 
