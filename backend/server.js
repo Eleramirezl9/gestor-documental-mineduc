@@ -34,8 +34,8 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Rutas principales
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/documents', require('./routes/documents'));
+// app.use('/api/users', require('./routes/users'));
+// app.use('/api/documents', require('./routes/documents'));
 // app.use('/api/workflows', require('./routes/workflows'));
 // app.use('/api/notifications', require('./routes/notifications'));
 // app.use('/api/reports', require('./routes/reports'));
@@ -70,4 +70,4 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
 });
 
-module.exports = app;
+module.exports = app;
