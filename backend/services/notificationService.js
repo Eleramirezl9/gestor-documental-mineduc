@@ -13,7 +13,7 @@ class NotificationService {
   initializeTransporter() {
     try {
       if (process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-        this.transporter = nodemailer.createTransporter({
+        this.transporter = nodemailer.createTransport({
           host: process.env.EMAIL_HOST,
           port: parseInt(process.env.EMAIL_PORT) || 587,
           secure: false,
@@ -450,4 +450,3 @@ class NotificationService {
 }
 
 module.exports = new NotificationService();
-

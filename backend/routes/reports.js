@@ -3,11 +3,7 @@ const { query, validationResult } = require('express-validator');
 const { supabase } = require('../config/supabase');
 const { verifyToken, requireRole } = require('../middleware/auth');
 const auditService = require('../services/auditService');
-const XLSX = require('xlsx');
-const workbook = XLSX.readFile('archivo.xlsx');
-const sheetName = workbook.SheetNames[0];
-const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-console.log(data);
+const ExcelJS = require('exceljs');
 
 const router = express.Router();
 
@@ -388,34 +384,34 @@ router.get('/export/documents', verifyToken, requireRole(['admin', 'editor']), [
     }));
 
     // Crear libro de Excel
-    const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Documentos');
 
-    // Ajustar ancho de columnas
-    const columnWidths = [
-      { wch: 36 }, // ID
-      { wch: 30 }, // Título
-      { wch: 40 }, // Descripción
-      { wch: 15 }, // Categoría
-      { wch: 12 }, // Estado
-      { wch: 25 }, // Archivo
-      { wch: 12 }, // Tamaño
-      { wch: 8 },  // Tipo
-      { wch: 8 },  // Público
-      { wch: 20 }, // Creado por
-      { wch: 15 }, // Fecha creación
-      { wch: 15 }, // Fecha actualización
-      { wch: 20 }, // Aprobado por
-      { wch: 15 }, // Fecha aprobación
-      { wch: 15 }, // Fecha efectiva
-      { wch: 15 }  // Fecha expiración
+    // Definir columnas
+    worksheet.columns = [
+      { header: 'ID', key: 'ID', width: 36 },
+      { header: 'Título', key: 'Título', width: 30 },
+      { header: 'Descripción', key: 'Descripción', width: 40 },
+      { header: 'Categoría', key: 'Categoría', width: 15 },
+      { header: 'Estado', key: 'Estado', width: 12 },
+      { header: 'Archivo', key: 'Archivo', width: 25 },
+      { header: 'Tamaño (bytes)', key: 'Tamaño (bytes)', width: 12 },
+      { header: 'Tipo', key: 'Tipo', width: 8 },
+      { header: 'Público', key: 'Público', width: 8 },
+      { header: 'Creado por', key: 'Creado por', width: 20 },
+      { header: 'Fecha de creación', key: 'Fecha de creación', width: 15 },
+      { header: 'Fecha de actualización', key: 'Fecha de actualización', width: 15 },
+      { header: 'Aprobado por', key: 'Aprobado por', width: 20 },
+      { header: 'Fecha de aprobación', key: 'Fecha de aprobación', width: 15 },
+      { header: 'Fecha efectiva', key: 'Fecha efectiva', width: 15 },
+      { header: 'Fecha de expiración', key: 'Fecha de expiración', width: 15 }
     ];
-    worksheet['!cols'] = columnWidths;
 
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Documentos');
+    // Agregar filas
+    worksheet.addRows(excelData);
 
     // Generar buffer
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const buffer = await workbook.xlsx.writeBuffer();
 
     // Registrar en auditoría
     await auditService.log({
@@ -495,29 +491,29 @@ router.get('/export/audit', verifyToken, requireRole(['admin']), [
     }));
 
     // Crear libro de Excel
-    const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Auditoría');
 
-    // Ajustar ancho de columnas
-    const columnWidths = [
-      { wch: 36 }, // ID
-      { wch: 25 }, // Usuario
-      { wch: 30 }, // Email
-      { wch: 12 }, // Rol
-      { wch: 25 }, // Acción
-      { wch: 15 }, // Tipo entidad
-      { wch: 36 }, // ID entidad
-      { wch: 50 }, // Detalles
-      { wch: 15 }, // IP
-      { wch: 30 }, // User Agent
-      { wch: 20 }  // Fecha
+    // Definir columnas
+    worksheet.columns = [
+        { header: 'ID', key: 'ID', width: 36 },
+        { header: 'Usuario', key: 'Usuario', width: 25 },
+        { header: 'Email', key: 'Email', width: 30 },
+        { header: 'Rol', key: 'Rol', width: 12 },
+        { header: 'Acción', key: 'Acción', width: 25 },
+        { header: 'Tipo de entidad', key: 'Tipo de entidad', width: 15 },
+        { header: 'ID de entidad', key: 'ID de entidad', width: 36 },
+        { header: 'Detalles', key: 'Detalles', width: 50 },
+        { header: 'Dirección IP', key: 'Dirección IP', width: 15 },
+        { header: 'User Agent', key: 'User Agent', width: 30 },
+        { header: 'Fecha y hora', key: 'Fecha y hora', width: 20 }
     ];
-    worksheet['!cols'] = columnWidths;
 
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Auditoría');
+    // Agregar filas
+    worksheet.addRows(excelData);
 
     // Generar buffer
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const buffer = await workbook.xlsx.writeBuffer();
 
     // Registrar en auditoría
     await auditService.log({
@@ -545,4 +541,3 @@ router.get('/export/audit', verifyToken, requireRole(['admin']), [
 });
 
 module.exports = router;
-
