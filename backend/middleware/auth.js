@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { supabase } = require('../config/supabase');
+const { supabase } = require('backend/config/supabase');
 
 // Middleware para verificar JWT
 const verifyToken = async (req, res, next) => {
