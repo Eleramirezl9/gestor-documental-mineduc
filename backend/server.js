@@ -1,75 +1,73 @@
 const express = require('express');
-const { body, validationResult } = require('express-validator');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { supabase } = require('backend/config/supabase');
-const { verifyToken } = require('../middleware/auth');
-const auditService = require('../services/auditService');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+require('dotenv').config();
 
-const router = express.Router();
+const app = express();
+const PORT = process.env.PORT || 5000;
 
-// Ruta de registro de usuario
-router.post('/register', [
-  body('email').isEmail().withMessage('Email inválido'),
-  body('password').isLength({ min: 6 }).withMessage('La contraseña debe tener al menos 6 caracteres'),
-  body('firstName').trim().notEmpty().withMessage('El nombre es requerido'),
-  body('lastName').trim().notEmpty().withMessage('El apellido es requerido')
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+// Middleware de seguridad
+app.use(helmet());
 
-    const { email, password, firstName, lastName } = req.body;
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 100, // límite de 100 requests por ventana de tiempo
+  message: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.'
+});
+app.use(limiter);
 
-    // Verificar si el usuario ya existe en Supabase Auth
-    const { data: existingUser, error: authError } = await supabase.auth.admin.getUserByEmail(email);
+// CORS - permitir todas las origins para desarrollo
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 
-    if (existingUser) {
-      return res.status(409).json({ error: 'El usuario ya existe' });
-    }
+// Logging
+app.use(morgan('combined'));
 
-    // Registrar usuario en Supabase Auth
-    const { data: user, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          first_name: firstName,
-          last_name: lastName,
-          role: 'viewer' // Rol por defecto
-        }
-      }
-    });
+// Parseo de JSON
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-    if (signUpError) {
-      return res.status(400).json({ error: signUpError.message });
-    }
+// Rutas principales
+app.use('/api/auth', require('./routes/auth'));
+// app.use('/api/users', require('./routes/users'));
+// app.use('/api/documents', require('./routes/documents'));
+// app.use('/api/workflows', require('./routes/workflows'));
+// app.use('/api/notifications', require('./routes/notifications'));
+// app.use('/api/reports', require('./routes/reports'));
+// app.use('/api/audit', require('./routes/audit'));
 
-    // Registrar en auditoría
-    await auditService.log({
-      user_id: user.user.id,
-      action: 'USER_REGISTERED',
-      entity_type: 'user',
-      entity_id: user.user.id,
-      details: { email, role: 'viewer' },
-      ip_address: req.ip
-    });
-
-    res.status(201).json({ message: 'Usuario registrado exitosamente. Por favor, verifica tu correo electrónico.', user: user.user });
-
-  } catch (error) {
-    console.error('Error en el registro:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
-  }
+// Ruta de salud
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
 });
 
-// router.post('/login', [...]);
-// router.post('/refresh-token', [...]);
-// router.post('/logout', [...]);
-// router.post('/forgot-password', [...]);
-// router.post('/reset-password', [...]);
-// router.get('/verify-email', [...]);
+// Manejo de errores global
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    error: 'Algo salió mal!',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Error interno del servidor'
+  });
+});
 
-module.exports = router;
+// Manejo de rutas no encontradas
+app.use('*', (req, res) => {
+  res.status(404).json({ error: 'Ruta no encontrada' });
+});
+
+// Iniciar servidor
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
+  console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+});
+
+module.exports = app;
