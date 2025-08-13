@@ -22,10 +22,6 @@
       "dest": "/index.html"
     }
   ],
-  "env": {
-    "VITE_APP_NAME": "MINEDUC - Sistema de Gestión Documental",
-    "VITE_APP_VERSION": "1.0.0"
-  },
   "build": {
     "env": {
       "VITE_SUPABASE_URL": "@supabase_url",
