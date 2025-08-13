@@ -34,8 +34,8 @@ app.use(morgan("combined"));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// Rutas principales (TODAS COMENTADAS)
-// app.use("/api/auth", require("./routes/auth"));
+// Rutas principales
+app.use("/api/auth", require("./routes/auth"));
 // app.use("/api/users", require("./routes/users"));
 // app.use("/api/documents", require("./routes/documents"));
 // app.use("/api/workflows", require("./routes/workflows"));
