@@ -108,6 +108,57 @@ router.get('/', verifyToken, [
   }
 });
 
+// Obtener estadísticas de documentos
+router.get('/stats/overview', verifyToken, requireRole(['admin', 'editor']), async (req, res) => {
+  try {
+    // Obtener conteos por estado
+    const { data: statusStats, error: statusError } = await supabase
+      .from('documents')
+      .select('status');
+
+    if (statusError) {
+      return res.status(400).json({ error: statusError.message });
+    }
+
+    const statusCounts = statusStats.reduce((acc, doc) => {
+      acc[doc.status] = (acc[doc.status] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Obtener conteos por categoría
+    const { data: categoryStats, error: categoryError } = await supabase
+      .from('documents')
+      .select(`
+        category_id,
+        document_categories(name)
+      `);
+
+    if (categoryError) {
+      return res.status(400).json({ error: categoryError.message });
+    }
+
+    const categoryCounts = categoryStats.reduce((acc, doc) => {
+      const categoryName = doc.document_categories?.name || 'Sin categoría';
+      acc[categoryName] = (acc[categoryName] || 0) + 1;
+      return acc;
+    }, {});
+
+    res.json({
+      total: statusStats.length,
+      pending: statusCounts.pending || 0,
+      approved: statusCounts.approved || 0,
+      rejected: statusCounts.rejected || 0,
+      draft: statusCounts.draft || 0,
+      archived: statusCounts.archived || 0,
+      byCategory: categoryCounts
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo estadísticas:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 // Obtener documento por ID
 router.get('/:id', verifyToken, async (req, res) => {
   try {
@@ -525,56 +576,4 @@ router.get('/:id/download', verifyToken, async (req, res) => {
   }
 });
 
-// Obtener estadísticas de documentos
-router.get('/stats/overview', verifyToken, requireRole(['admin', 'editor']), async (req, res) => {
-  try {
-    // Obtener conteos por estado
-    const { data: statusStats, error: statusError } = await supabase
-      .from('documents')
-      .select('status');
-
-    if (statusError) {
-      return res.status(400).json({ error: statusError.message });
-    }
-
-    const statusCounts = statusStats.reduce((acc, doc) => {
-      acc[doc.status] = (acc[doc.status] || 0) + 1;
-      return acc;
-    }, {});
-
-    // Obtener conteos por categoría
-    const { data: categoryStats, error: categoryError } = await supabase
-      .from('documents')
-      .select(`
-        category_id,
-        document_categories(name)
-      `);
-
-    if (categoryError) {
-      return res.status(400).json({ error: categoryError.message });
-    }
-
-    const categoryCounts = categoryStats.reduce((acc, doc) => {
-      const categoryName = doc.document_categories?.name || 'Sin categoría';
-      acc[categoryName] = (acc[categoryName] || 0) + 1;
-      return acc;
-    }, {});
-
-    res.json({
-      total: statusStats.length,
-      pending: statusCounts.pending || 0,
-      approved: statusCounts.approved || 0,
-      rejected: statusCounts.rejected || 0,
-      draft: statusCounts.draft || 0,
-      archived: statusCounts.archived || 0,
-      byCategory: categoryCounts
-    });
-
-  } catch (error) {
-    console.error('Error obteniendo estadísticas:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
-  }
-});
-
 module.exports = router;
-

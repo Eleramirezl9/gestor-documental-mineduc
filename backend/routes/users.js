@@ -68,6 +68,52 @@ router.get('/', verifyToken, requireRole(['admin']), [
   }
 });
 
+// Obtener estadísticas de usuarios
+router.get('/stats/overview', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    // Obtener conteos por rol
+    const { data: roleStats, error: roleError } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('is_active', true);
+
+    if (roleError) {
+      return res.status(400).json({ error: roleError.message });
+    }
+
+    // Contar por rol
+    const roleCounts = roleStats.reduce((acc, user) => {
+      acc[user.role] = (acc[user.role] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Obtener usuarios activos vs inactivos
+    const { data: statusStats, error: statusError } = await supabase
+      .from('user_profiles')
+      .select('is_active');
+
+    if (statusError) {
+      return res.status(400).json({ error: statusError.message });
+    }
+
+    const statusCounts = statusStats.reduce((acc, user) => {
+      const status = user.is_active ? 'active' : 'inactive';
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {});
+
+    res.json({
+      roleDistribution: roleCounts,
+      statusDistribution: statusCounts,
+      totalUsers: statusStats.length
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo estadísticas:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 // Obtener usuario por ID
 router.get('/:id', verifyToken, requireRole(['admin', 'editor']), async (req, res) => {
   try {
@@ -221,51 +267,4 @@ router.delete('/:id', verifyToken, requireRole(['admin']), async (req, res) => {
   }
 });
 
-// Obtener estadísticas de usuarios
-router.get('/stats/overview', verifyToken, requireRole(['admin']), async (req, res) => {
-  try {
-    // Obtener conteos por rol
-    const { data: roleStats, error: roleError } = await supabase
-      .from('user_profiles')
-      .select('role')
-      .eq('is_active', true);
-
-    if (roleError) {
-      return res.status(400).json({ error: roleError.message });
-    }
-
-    // Contar por rol
-    const roleCounts = roleStats.reduce((acc, user) => {
-      acc[user.role] = (acc[user.role] || 0) + 1;
-      return acc;
-    }, {});
-
-    // Obtener usuarios activos vs inactivos
-    const { data: statusStats, error: statusError } = await supabase
-      .from('user_profiles')
-      .select('is_active');
-
-    if (statusError) {
-      return res.status(400).json({ error: statusError.message });
-    }
-
-    const statusCounts = statusStats.reduce((acc, user) => {
-      const status = user.is_active ? 'active' : 'inactive';
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {});
-
-    res.json({
-      roleDistribution: roleCounts,
-      statusDistribution: statusCounts,
-      totalUsers: statusStats.length
-    });
-
-  } catch (error) {
-    console.error('Error obteniendo estadísticas:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
-  }
-});
-
 module.exports = router;
-
