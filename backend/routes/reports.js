@@ -4,6 +4,10 @@ const { supabase } = require('../config/supabase');
 const { verifyToken, requireRole } = require('../middleware/auth');
 const auditService = require('../services/auditService');
 const XLSX = require('xlsx');
+const workbook = XLSX.readFile('archivo.xlsx');
+const sheetName = workbook.SheetNames[0];
+const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+console.log(data);
 
 const router = express.Router();
 
