@@ -46,9 +46,9 @@ Esta guía te llevará paso a paso para desplegar el sistema completo en producc
 
 1. Ve a "Settings" > "API"
 2. Anota estos valores:
-   - **Project URL**: `https://xxx.supabase.co`
-   - **anon public key**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
-   - **service_role key**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+   - **Project URL**: `https://vyhyyddvktqfjrsogwtf.supabase.co`
+   - **anon public key**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5aHl5ZGR2a3RxZmpyc29nd3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwNDMwMzYsImV4cCI6MjA3MDYxOTAzNn0.Wex1jbTbtSL4ieUXPkwVe4SEkn-GsZLh-wQ8IEhQZt4`
+   - **service_role key**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5aHl5ZGR2a3RxZmpyc29nd3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTA0MzAzNiwiZXhwIjoyMDcwNjE5MDM2fQ.nTsuidx7V9X2t3FnlMoblbkMZFXHiDVQ3NMatDBn8DQ`
 
 ## 🔧 Paso 2: Desplegar Backend en Render
 
