@@ -36,10 +36,10 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/documents', require('./routes/documents'));
-app.use('/api/workflows', require('./routes/workflows'));
-app.use('/api/notifications', require('./routes/notifications'));
-app.use('/api/reports', require('./routes/reports'));
-app.use('/api/audit', require('./routes/audit'));
+// app.use('/api/workflows', require('./routes/workflows'));
+// app.use('/api/notifications', require('./routes/notifications'));
+// app.use('/api/reports', require('./routes/reports'));
+// app.use('/api/audit', require('./routes/audit'));
 
 // Ruta de salud
 app.get('/health', (req, res) => {
@@ -71,4 +71,3 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 
 module.exports = app;
-
