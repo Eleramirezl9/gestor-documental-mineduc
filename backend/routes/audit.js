@@ -6,7 +6,202 @@ const auditService = require('../services/auditService');
 
 const router = express.Router();
 
-// Obtener logs de auditoría
+/**
+ * @swagger
+ * tags:
+ *   name: Audit
+ *   description: Gestión de logs y auditoría del sistema
+ * 
+ * components:
+ *   schemas:
+ *     AuditLog:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *           description: ID único del log
+ *         user_id:
+ *           type: string
+ *           format: uuid
+ *           description: ID del usuario que ejecutó la acción
+ *         action:
+ *           type: string
+ *           description: Acción realizada
+ *         entity_type:
+ *           type: string
+ *           description: Tipo de entidad afectada
+ *         entity_id:
+ *           type: string
+ *           format: uuid
+ *           description: ID de la entidad afectada
+ *         details:
+ *           type: object
+ *           description: Detalles adicionales de la acción
+ *         ip_address:
+ *           type: string
+ *           description: Dirección IP del usuario
+ *         user_agent:
+ *           type: string
+ *           description: User Agent del navegador
+ *         timestamp:
+ *           type: string
+ *           format: date-time
+ *           description: Fecha y hora del evento
+ *         user_profiles:
+ *           type: object
+ *           description: Información del perfil del usuario
+ *     
+ *     AuditStats:
+ *       type: object
+ *       properties:
+ *         period:
+ *           type: object
+ *           properties:
+ *             startDate: { type: string, format: date-time }
+ *             endDate: { type: string, format: date-time }
+ *         totalLogs:
+ *           type: integer
+ *           description: Total de logs en el período
+ *         actionBreakdown:
+ *           type: object
+ *           description: Desglose por acción
+ *         userActivity:
+ *           type: object
+ *           description: Actividad por usuario
+ *         ipActivity:
+ *           type: object
+ *           description: Actividad por IP
+ *         hourlyActivity:
+ *           type: object
+ *           description: Actividad por hora del día
+ *         dailyActivity:
+ *           type: object
+ *           description: Actividad por día
+ *         entityActivity:
+ *           type: object
+ *           description: Actividad por tipo de entidad
+ *         topUsers:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               count: { type: integer }
+ *         topIPs:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               ip: { type: string }
+ *               count: { type: integer }
+ *         securityEvents:
+ *           type: integer
+ *           description: Número de eventos de seguridad
+ */
+
+/**
+ * @swagger
+ * /api/audit:
+ *   get:
+ *     summary: Obtener logs de auditoría
+ *     description: Obtiene una lista paginada y filtrada de logs de auditoría (solo admins)
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Número de página
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 1000
+ *           default: 50
+ *         description: Número de logs por página
+ *       - in: query
+ *         name: startDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Fecha de inicio para filtrar
+ *       - in: query
+ *         name: endDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Fecha de fin para filtrar
+ *       - in: query
+ *         name: userId
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filtrar por usuario específico
+ *       - in: query
+ *         name: action
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por acción específica
+ *       - in: query
+ *         name: entityType
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por tipo de entidad
+ *       - in: query
+ *         name: entityId
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filtrar por entidad específica
+ *       - in: query
+ *         name: ipAddress
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: ipv4
+ *         description: Filtrar by dirección IP
+ *     responses:
+ *       200:
+ *         description: Logs de auditoría obtenidos exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 logs:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/AuditLog'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page: { type: integer }
+ *                     limit: { type: integer }
+ *                     total: { type: integer }
+ *                     totalPages: { type: integer }
+ *       400:
+ *         description: Error de validación
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Solo administradores pueden acceder a logs de auditoría
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/', verifyToken, requireRole(['admin']), [
   query('page').optional().isInt({ min: 1 }),
   query('limit').optional().isInt({ min: 1, max: 1000 }),
@@ -102,7 +297,46 @@ router.get('/', verifyToken, requireRole(['admin']), [
   }
 });
 
-// Obtener estadísticas de auditoría
+/**
+ * @swagger
+ * /api/audit/stats:
+ *   get:
+ *     summary: Obtener estadísticas de auditoría
+ *     description: Obtiene estadísticas detalladas de los logs de auditoría (solo admins)
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: "Fecha de inicio (por defecto: 30 días atrás)"
+ *       - in: query
+ *         name: endDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: "Fecha de fin (por defecto: ahora)"
+ *     responses:
+ *       200:
+ *         description: Estadísticas obtenidas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuditStats'
+ *       400:
+ *         description: Error de validación o al obtener estadísticas
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Solo administradores pueden acceder a estadísticas
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/stats', verifyToken, requireRole(['admin']), [
   query('startDate').optional().isISO8601(),
   query('endDate').optional().isISO8601()
@@ -221,7 +455,42 @@ router.get('/stats', verifyToken, requireRole(['admin']), [
   }
 });
 
-// Obtener log específico por ID
+/**
+ * @swagger
+ * /api/audit/{id}:
+ *   get:
+ *     summary: Obtener log específico por ID
+ *     description: Obtiene un log de auditoría específico por su ID (solo admins)
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del log de auditoría
+ *     responses:
+ *       200:
+ *         description: Log obtenido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 log:
+ *                   $ref: '#/components/schemas/AuditLog'
+ *       404:
+ *         description: Log de auditoría no encontrado
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Solo administradores pueden acceder a logs
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/:id', verifyToken, requireRole(['admin']), async (req, res) => {
   try {
     const { id } = req.params;
@@ -257,7 +526,71 @@ router.get('/:id', verifyToken, requireRole(['admin']), async (req, res) => {
   }
 });
 
-// Exportar logs de auditoría
+/**
+ * @swagger
+ * /api/audit/export/csv:
+ *   get:
+ *     summary: Exportar logs de auditoría a CSV
+ *     description: Genera y descarga un archivo CSV con los logs de auditoría (solo admins)
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: "Fecha de inicio (por defecto: 30 días atrás)"
+ *       - in: query
+ *         name: endDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: "Fecha de fin (por defecto: ahora)"
+ *       - in: query
+ *         name: userId
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filtrar por usuario específico
+ *       - in: query
+ *         name: action
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por acción específica
+ *       - in: query
+ *         name: entityType
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por tipo de entidad
+ *     responses:
+ *       200:
+ *         description: Archivo CSV generado y descargado
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *         headers:
+ *           Content-Disposition:
+ *             description: attachment; filename="audit_logs_YYYY-MM-DD.csv"
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: Error de validación o al generar el archivo
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Solo administradores pueden exportar logs
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/export/csv', verifyToken, requireRole(['admin']), [
   query('startDate').optional().isISO8601(),
   query('endDate').optional().isISO8601(),
@@ -307,7 +640,37 @@ router.get('/export/csv', verifyToken, requireRole(['admin']), [
   }
 });
 
-// Obtener acciones disponibles para filtros
+/**
+ * @swagger
+ * /api/audit/actions/list:
+ *   get:
+ *     summary: Obtener lista de acciones disponibles
+ *     description: Obtiene todas las acciones únicas disponibles en los logs para filtros (solo admins)
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de acciones obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 actions:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   description: Lista de acciones únicas ordenadas alfabéticamente
+ *       400:
+ *         description: Error al obtener las acciones
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Solo administradores pueden acceder a esta información
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/actions/list', verifyToken, requireRole(['admin']), async (req, res) => {
   try {
     const { data: actions, error } = await supabase
@@ -330,7 +693,37 @@ router.get('/actions/list', verifyToken, requireRole(['admin']), async (req, res
   }
 });
 
-// Obtener tipos de entidad disponibles para filtros
+/**
+ * @swagger
+ * /api/audit/entities/list:
+ *   get:
+ *     summary: Obtener lista de tipos de entidad disponibles
+ *     description: Obtiene todos los tipos de entidad únicos disponibles en los logs para filtros (solo admins)
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de tipos de entidad obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 entityTypes:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   description: Lista de tipos de entidad únicos ordenados alfabéticamente
+ *       400:
+ *         description: Error al obtener los tipos de entidad
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Solo administradores pueden acceder a esta información
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/entities/list', verifyToken, requireRole(['admin']), async (req, res) => {
   try {
     const { data: entities, error } = await supabase
@@ -354,7 +747,49 @@ router.get('/entities/list', verifyToken, requireRole(['admin']), async (req, re
   }
 });
 
-// Obtener resumen de actividad reciente
+/**
+ * @swagger
+ * /api/audit/activity/recent:
+ *   get:
+ *     summary: Obtener resumen de actividad reciente
+ *     description: Obtiene un resumen de la actividad reciente del sistema (solo admins)
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Actividad reciente obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 recentActivity:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/AuditLog'
+ *                   description: Últimos 20 logs de actividad (24 horas)
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     totalLogsToday:
+ *                       type: integer
+ *                       description: Total de logs de hoy
+ *                     activeUsersToday:
+ *                       type: integer
+ *                       description: Número de usuarios activos hoy
+ *                     last24Hours:
+ *                       type: integer
+ *                       description: Logs en las últimas 24 horas
+ *       400:
+ *         description: Error al obtener la actividad reciente
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Solo administradores pueden acceder a esta información
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/activity/recent', verifyToken, requireRole(['admin']), async (req, res) => {
   try {
     // Últimas 24 horas

@@ -11,6 +11,101 @@ const aiService = require('../services/aiService');
 
 const router = express.Router();
 
+/**
+ * @swagger
+ * tags:
+ *   name: Documents
+ *   description: Gestión de documentos del sistema
+ * 
+ * components:
+ *   schemas:
+ *     Document:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *           description: ID único del documento
+ *         title:
+ *           type: string
+ *           description: Título del documento
+ *         description:
+ *           type: string
+ *           description: Descripción del documento
+ *         file_name:
+ *           type: string
+ *           description: Nombre del archivo original
+ *         file_path:
+ *           type: string
+ *           description: Ruta del archivo en el servidor
+ *         file_size:
+ *           type: integer
+ *           description: Tamaño del archivo en bytes
+ *         mime_type:
+ *           type: string
+ *           description: Tipo MIME del archivo
+ *         category_id:
+ *           type: string
+ *           format: uuid
+ *           description: ID de la categoría del documento
+ *         status:
+ *           type: string
+ *           enum: [draft, pending, approved, rejected, archived]
+ *           description: Estado actual del documento
+ *         tags:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: Etiquetas asociadas al documento
+ *         ocr_text:
+ *           type: string
+ *           description: Texto extraído mediante OCR
+ *         ai_classification:
+ *           type: object
+ *           description: Clasificación generada por IA
+ *         metadata:
+ *           type: object
+ *           description: Metadatos adicionales del documento
+ *         created_by:
+ *           type: string
+ *           format: uuid
+ *           description: ID del usuario que creó el documento
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *           description: Fecha de creación
+ *         updated_at:
+ *           type: string
+ *           format: date-time
+ *           description: Fecha de última actualización
+ *     
+ *     DocumentUpload:
+ *       type: object
+ *       required:
+ *         - title
+ *         - file
+ *       properties:
+ *         title:
+ *           type: string
+ *           description: Título del documento
+ *         description:
+ *           type: string
+ *           description: Descripción del documento
+ *         category_id:
+ *           type: string
+ *           format: uuid
+ *           description: ID de la categoría del documento
+ *         tags:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: Etiquetas del documento
+ *         file:
+ *           type: string
+ *           format: binary
+ *           description: Archivo a subir (PDF, DOC, DOCX, JPG, JPEG, PNG, GIF)
+ */
+
 // Configuración de multer para subida de archivos
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -39,7 +134,99 @@ const upload = multer({
   }
 });
 
-// Obtener todos los documentos
+/**
+ * @swagger
+ * /api/documents:
+ *   get:
+ *     summary: Obtener lista de documentos
+ *     description: Obtiene una lista paginada de documentos con filtros opcionales
+ *     tags: [Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Número de página
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Número de documentos por página
+ *       - in: query
+ *         name: search
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Búsqueda en título, descripción y texto extraído
+ *       - in: query
+ *         name: category
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filtrar por categoría
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [draft, pending, approved, rejected, archived]
+ *         description: Filtrar por estado
+ *       - in: query
+ *         name: sort
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [title, created_at, updated_at]
+ *           default: created_at
+ *         description: Campo por el cual ordenar
+ *       - in: query
+ *         name: order
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Dirección del ordenamiento
+ *     responses:
+ *       200:
+ *         description: Lista de documentos obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 documents:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Document'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page: { type: integer }
+ *                     limit: { type: integer }
+ *                     total: { type: integer }
+ *                     totalPages: { type: integer }
+ *       400:
+ *         description: Error de validación
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/', verifyToken, [
   query('page').optional().isInt({ min: 1 }),
   query('limit').optional().isInt({ min: 1, max: 100 }),
@@ -60,13 +247,13 @@ router.get('/', verifyToken, [
     const offset = (page - 1) * limit;
     const { search, category, status, sort = 'created_at', order = 'desc' } = req.query;
 
-    let query = supabase
-      .from('documents_full')
+    let query = require('../config/supabase').supabaseAdmin
+      .from('documents')
       .select('*', { count: 'exact' })
       .order(sort, { ascending: order === 'asc' });
 
     // Aplicar filtros según el rol del usuario
-    if (req.user.profile.role !== 'admin') {
+    if (req.user?.profile?.role !== 'admin') {
       query = query.or(`created_by.eq.${req.user.id},is_public.eq.true`);
     }
 
@@ -108,11 +295,43 @@ router.get('/', verifyToken, [
   }
 });
 
-// Obtener estadísticas de documentos
+/**
+ * @swagger
+ * /api/documents/stats/overview:
+ *   get:
+ *     summary: Obtener estadísticas de documentos
+ *     description: Obtiene estadísticas generales sobre documentos por estado y categoría
+ *     tags: [Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Estadísticas obtenidas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total: { type: integer }
+ *                 pending: { type: integer }
+ *                 approved: { type: integer }
+ *                 rejected: { type: integer }
+ *                 draft: { type: integer }
+ *                 archived: { type: integer }
+ *                 byCategory: { type: object }
+ *       400:
+ *         description: Error al obtener estadísticas
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Permisos insuficientes (solo admin/editor)
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/stats/overview', verifyToken, requireRole(['admin', 'editor']), async (req, res) => {
   try {
     // Obtener conteos por estado
-    const { data: statusStats, error: statusError } = await supabase
+    const { data: statusStats, error: statusError } = await require('../config/supabase').supabaseAdmin
       .from('documents')
       .select('status');
 
@@ -159,7 +378,42 @@ router.get('/stats/overview', verifyToken, requireRole(['admin', 'editor']), asy
   }
 });
 
-// Obtener documento por ID
+/**
+ * @swagger
+ * /api/documents/{id}:
+ *   get:
+ *     summary: Obtener documento por ID
+ *     description: Obtiene un documento específico por su ID
+ *     tags: [Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID único del documento
+ *     responses:
+ *       200:
+ *         description: Documento obtenido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 document:
+ *                   $ref: '#/components/schemas/Document'
+ *       404:
+ *         description: Documento no encontrado
+ *       403:
+ *         description: No tienes permisos para ver este documento
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/:id', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -199,7 +453,69 @@ router.get('/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Crear nuevo documento
+/**
+ * @swagger
+ * /api/documents:
+ *   post:
+ *     summary: Crear nuevo documento
+ *     description: Crea un nuevo documento en el sistema (sin archivo)
+ *     tags: [Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 minLength: 3
+ *                 maxLength: 255
+ *                 description: Título del documento
+ *               description:
+ *                 type: string
+ *                 maxLength: 1000
+ *                 description: Descripción del documento
+ *               categoryId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: ID de la categoría
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Etiquetas del documento
+ *               effectiveDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Fecha de vigencia
+ *               expirationDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Fecha de expiración
+ *               isPublic:
+ *                 type: boolean
+ *                 description: Si el documento es público
+ *     responses:
+ *       201:
+ *         description: Documento creado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Error de validación
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Permisos insuficientes
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.post('/', verifyToken, requireRole(['admin', 'editor']), [
   body('title').trim().isLength({ min: 3, max: 255 }).withMessage('El título debe tener entre 3 y 255 caracteres'),
   body('description').optional().trim().isLength({ max: 1000 }),
@@ -264,7 +580,58 @@ router.post('/', verifyToken, requireRole(['admin', 'editor']), [
   }
 });
 
-// Subir archivo para documento
+/**
+ * @swagger
+ * /api/documents/{id}/upload:
+ *   post:
+ *     summary: Subir archivo para documento
+ *     description: Sube un archivo para un documento existente con procesamiento OCR y clasificación IA
+ *     tags: [Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del documento
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Archivo a subir (PDF, DOC, DOCX, JPG, JPEG, PNG, GIF - máximo 50MB)
+ *     responses:
+ *       200:
+ *         description: Archivo subido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Archivo subido exitosamente"
+ *                 document:
+ *                   $ref: '#/components/schemas/Document'
+ *       400:
+ *         description: Error de validación o tipo de archivo no permitido
+ *       404:
+ *         description: Documento no encontrado
+ *       403:
+ *         description: No tienes permisos para subir archivos a este documento
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.post('/:id/upload', verifyToken, requireRole(['admin', 'editor']), upload.single('file'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -382,7 +749,77 @@ router.post('/:id/upload', verifyToken, requireRole(['admin', 'editor']), upload
   }
 });
 
-// Actualizar documento
+/**
+ * @swagger
+ * /api/documents/{id}:
+ *   put:
+ *     summary: Actualizar documento
+ *     description: Actualiza la información de un documento existente
+ *     tags: [Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del documento a actualizar
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 minLength: 3
+ *                 maxLength: 255
+ *                 description: Nuevo título del documento
+ *               description:
+ *                 type: string
+ *                 maxLength: 1000
+ *                 description: Nueva descripción del documento
+ *               categoryId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Nuevo ID de la categoría
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Nuevas etiquetas del documento
+ *               effectiveDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Nueva fecha de vigencia
+ *               expirationDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Nueva fecha de expiración
+ *               isPublic:
+ *                 type: boolean
+ *                 description: Si el documento es público
+ *     responses:
+ *       200:
+ *         description: Documento actualizado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Error de validación
+ *       404:
+ *         description: Documento no encontrado
+ *       403:
+ *         description: No tienes permisos para editar este documento
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.put('/:id', verifyToken, requireRole(['admin', 'editor']), [
   body('title').optional().trim().isLength({ min: 3, max: 255 }),
   body('description').optional().trim().isLength({ max: 1000 }),
@@ -462,7 +899,45 @@ router.put('/:id', verifyToken, requireRole(['admin', 'editor']), [
   }
 });
 
-// Eliminar documento
+/**
+ * @swagger
+ * /api/documents/{id}:
+ *   delete:
+ *     summary: Eliminar documento
+ *     description: Elimina un documento y su archivo asociado del sistema
+ *     tags: [Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del documento a eliminar
+ *     responses:
+ *       200:
+ *         description: Documento eliminado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Documento eliminado exitosamente"
+ *       404:
+ *         description: Documento no encontrado
+ *       403:
+ *         description: No tienes permisos para eliminar este documento
+ *       401:
+ *         description: Token no válido o ausente
+ *       400:
+ *         description: Error al eliminar el documento
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.delete('/:id', verifyToken, requireRole(['admin', 'editor']), async (req, res) => {
   try {
     const { id } = req.params;
@@ -524,7 +999,48 @@ router.delete('/:id', verifyToken, requireRole(['admin', 'editor']), async (req,
   }
 });
 
-// Descargar documento
+/**
+ * @swagger
+ * /api/documents/{id}/download:
+ *   get:
+ *     summary: Descargar documento
+ *     description: Genera una URL temporal para descargar el archivo del documento
+ *     tags: [Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del documento a descargar
+ *     responses:
+ *       200:
+ *         description: URL de descarga generada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 downloadUrl:
+ *                   type: string
+ *                   description: URL firmada para descargar el archivo (válida por 1 hora)
+ *                 fileName:
+ *                   type: string
+ *                   description: Nombre original del archivo
+ *       404:
+ *         description: Documento no encontrado
+ *       403:
+ *         description: No tienes permisos para descargar este documento
+ *       401:
+ *         description: Token no válido o ausente
+ *       400:
+ *         description: Error generando URL de descarga
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/:id/download', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;

@@ -41,4 +41,6 @@ services:
         value: 900000
       - key: RATE_LIMIT_MAX_REQUESTS
         value: 100
+      - key: FRONTEND_URL
+        value: https://gestor-documental-mineduc.vercel.app
 

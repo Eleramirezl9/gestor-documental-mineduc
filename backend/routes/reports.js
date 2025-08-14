@@ -7,7 +7,150 @@ const ExcelJS = require('exceljs');
 
 const router = express.Router();
 
-// Reporte de estadísticas de documentos
+/**
+ * @swagger
+ * tags:
+ *   name: Reports
+ *   description: Generación y exportación de reportes del sistema
+ * 
+ * components:
+ *   schemas:
+ *     ReportPeriod:
+ *       type: object
+ *       properties:
+ *         startDate:
+ *           type: string
+ *           format: date-time
+ *           description: Fecha de inicio del reporte
+ *         endDate:
+ *           type: string
+ *           format: date-time
+ *           description: Fecha de fin del reporte
+ *     
+ *     DocumentsReport:
+ *       type: object
+ *       properties:
+ *         period:
+ *           $ref: '#/components/schemas/ReportPeriod'
+ *         statistics:
+ *           type: object
+ *           properties:
+ *             total: { type: integer }
+ *             byStatus: { type: object }
+ *             byCategory: { type: object }
+ *             byMonth: { type: object }
+ *             byCreator: { type: object }
+ *             averageProcessingTime: { type: integer, description: "Días promedio" }
+ *             totalSize: { type: integer, description: "Tamaño total en bytes" }
+ *         documents:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/Document'
+ *           description: "Hasta 100 documentos del reporte"
+ *     
+ *     UserActivityReport:
+ *       type: object
+ *       properties:
+ *         period:
+ *           $ref: '#/components/schemas/ReportPeriod'
+ *         statistics:
+ *           type: object
+ *           properties:
+ *             totalUsers: { type: integer }
+ *             activeUsers: { type: integer }
+ *             usersByRole: { type: object }
+ *             activityByUser: { type: object }
+ *             activityByAction: { type: object }
+ *             activityByDay: { type: object }
+ *             mostActiveUsers: 
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   name: { type: string }
+ *                   count: { type: integer }
+ *         recentActivity:
+ *           type: array
+ *           items:
+ *             type: object
+ *           description: "Últimas 50 actividades"
+ *     
+ *     WorkflowsReport:
+ *       type: object
+ *       properties:
+ *         period:
+ *           $ref: '#/components/schemas/ReportPeriod'
+ *         statistics:
+ *           type: object
+ *           properties:
+ *             total: { type: integer }
+ *             byStatus: { type: object }
+ *             byPriority: { type: object }
+ *             byType: { type: object }
+ *             averageCompletionTime: { type: integer, description: "Días promedio" }
+ *             overdueCount: { type: integer }
+ *             completionRate: { type: integer, description: "Porcentaje de completación" }
+ *         workflows:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/Workflow'
+ *           description: "Hasta 100 workflows del reporte"
+ */
+
+/**
+ * @swagger
+ * /api/reports/documents:
+ *   get:
+ *     summary: Generar reporte de documentos
+ *     description: Genera un reporte detallado con estadísticas de documentos
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Fecha de inicio para el filtro
+ *       - in: query
+ *         name: endDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Fecha de fin para el filtro
+ *       - in: query
+ *         name: category
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filtrar por categoría específica
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [draft, pending, approved, rejected, archived]
+ *         description: Filtrar por estado específico
+ *     responses:
+ *       200:
+ *         description: Reporte generado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/DocumentsReport'
+ *       400:
+ *         description: Error de validación o al generar el reporte
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Permisos insuficientes
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/documents', verifyToken, requireRole(['admin', 'editor']), [
   query('startDate').optional().isISO8601(),
   query('endDate').optional().isISO8601(),
@@ -114,7 +257,53 @@ router.get('/documents', verifyToken, requireRole(['admin', 'editor']), [
   }
 });
 
-// Reporte de actividad de usuarios
+/**
+ * @swagger
+ * /api/reports/user-activity:
+ *   get:
+ *     summary: Generar reporte de actividad de usuarios
+ *     description: Genera un reporte detallado de la actividad de usuarios en el sistema (solo admins)
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Fecha de inicio para el filtro
+ *       - in: query
+ *         name: endDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Fecha de fin para el filtro
+ *       - in: query
+ *         name: userId
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filtrar por usuario específico
+ *     responses:
+ *       200:
+ *         description: Reporte de actividad generado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UserActivityReport'
+ *       400:
+ *         description: Error de validación o al generar el reporte
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Solo administradores pueden acceder a este reporte
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/user-activity', verifyToken, requireRole(['admin']), [
   query('startDate').optional().isISO8601(),
   query('endDate').optional().isISO8601(),
@@ -227,7 +416,53 @@ router.get('/user-activity', verifyToken, requireRole(['admin']), [
   }
 });
 
-// Reporte de workflows
+/**
+ * @swagger
+ * /api/reports/workflows:
+ *   get:
+ *     summary: Generar reporte de workflows
+ *     description: Genera un reporte detallado con estadísticas de workflows de aprobación
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Fecha de inicio para el filtro
+ *       - in: query
+ *         name: endDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Fecha de fin para el filtro
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [pending, in_progress, approved, rejected, cancelled]
+ *         description: Filtrar por estado específico
+ *     responses:
+ *       200:
+ *         description: Reporte de workflows generado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/WorkflowsReport'
+ *       400:
+ *         description: Error de validación o al generar el reporte
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Permisos insuficientes
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/workflows', verifyToken, requireRole(['admin', 'editor']), [
   query('startDate').optional().isISO8601(),
   query('endDate').optional().isISO8601(),
@@ -333,7 +568,66 @@ router.get('/workflows', verifyToken, requireRole(['admin', 'editor']), [
   }
 });
 
-// Exportar reporte de documentos a Excel
+/**
+ * @swagger
+ * /api/reports/export/documents:
+ *   get:
+ *     summary: Exportar reporte de documentos a Excel
+ *     description: Genera y descarga un archivo Excel con el reporte de documentos
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Fecha de inicio para el filtro
+ *       - in: query
+ *         name: endDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Fecha de fin para el filtro
+ *       - in: query
+ *         name: category
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filtrar por categoría específica
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [draft, pending, approved, rejected, archived]
+ *         description: Filtrar por estado específico
+ *     responses:
+ *       200:
+ *         description: Archivo Excel generado y descargado
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *         headers:
+ *           Content-Disposition:
+ *             description: attachment; filename="documentos_YYYY-MM-DD.xlsx"
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: Error de validación o al generar el archivo
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Permisos insuficientes
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/export/documents', verifyToken, requireRole(['admin', 'editor']), [
   query('startDate').optional().isISO8601(),
   query('endDate').optional().isISO8601(),
@@ -438,7 +732,65 @@ router.get('/export/documents', verifyToken, requireRole(['admin', 'editor']), [
   }
 });
 
-// Exportar reporte de auditoría a Excel
+/**
+ * @swagger
+ * /api/reports/export/audit:
+ *   get:
+ *     summary: Exportar reporte de auditoría a Excel
+ *     description: Genera y descarga un archivo Excel con los logs de auditoría (solo admins)
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Fecha de inicio para el filtro
+ *       - in: query
+ *         name: endDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Fecha de fin para el filtro
+ *       - in: query
+ *         name: userId
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filtrar por usuario específico
+ *       - in: query
+ *         name: action
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por acción específica
+ *     responses:
+ *       200:
+ *         description: Archivo Excel generado y descargado
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *         headers:
+ *           Content-Disposition:
+ *             description: attachment; filename="auditoria_YYYY-MM-DD.xlsx"
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: Error de validación o al generar el archivo
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Solo administradores pueden exportar logs de auditoría
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/export/audit', verifyToken, requireRole(['admin']), [
   query('startDate').optional().isISO8601(),
   query('endDate').optional().isISO8601(),

@@ -6,7 +6,178 @@ const auditService = require('../services/auditService');
 
 const router = express.Router();
 
-// Obtener notificaciones del usuario
+/**
+ * @swagger
+ * tags:
+ *   name: Notifications
+ *   description: Gestión de notificaciones del sistema
+ * 
+ * components:
+ *   schemas:
+ *     Notification:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *           description: ID único de la notificación
+ *         user_id:
+ *           type: string
+ *           format: uuid
+ *           description: ID del usuario destinatario
+ *         title:
+ *           type: string
+ *           description: Título de la notificación
+ *         message:
+ *           type: string
+ *           description: Mensaje de la notificación
+ *         type:
+ *           type: string
+ *           enum: [info, warning, error, success]
+ *           description: Tipo de notificación
+ *         is_read:
+ *           type: boolean
+ *           description: Si la notificación ha sido leída
+ *         action_url:
+ *           type: string
+ *           description: URL de acción opcional
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *           description: Fecha de creación
+ *     
+ *     NotificationCreate:
+ *       type: object
+ *       required:
+ *         - userId
+ *         - title
+ *         - message
+ *       properties:
+ *         userId:
+ *           type: string
+ *           format: uuid
+ *           description: ID del usuario destinatario
+ *         title:
+ *           type: string
+ *           minLength: 3
+ *           maxLength: 255
+ *           description: Título de la notificación
+ *         message:
+ *           type: string
+ *           minLength: 10
+ *           maxLength: 1000
+ *           description: Mensaje de la notificación
+ *         type:
+ *           type: string
+ *           enum: [info, warning, error, success]
+ *           default: info
+ *           description: Tipo de notificación
+ *         actionUrl:
+ *           type: string
+ *           format: uri
+ *           description: URL de acción opcional
+ *     
+ *     NotificationBroadcast:
+ *       type: object
+ *       required:
+ *         - userIds
+ *         - title
+ *         - message
+ *       properties:
+ *         userIds:
+ *           type: array
+ *           items:
+ *             type: string
+ *             format: uuid
+ *           minItems: 1
+ *           description: Lista de IDs de usuarios destinatarios
+ *         title:
+ *           type: string
+ *           minLength: 3
+ *           maxLength: 255
+ *           description: Título de la notificación
+ *         message:
+ *           type: string
+ *           minLength: 10
+ *           maxLength: 1000
+ *           description: Mensaje de la notificación
+ *         type:
+ *           type: string
+ *           enum: [info, warning, error, success]
+ *           default: info
+ *           description: Tipo de notificación
+ *         actionUrl:
+ *           type: string
+ *           format: uri
+ *           description: URL de acción opcional
+ */
+
+/**
+ * @swagger
+ * /api/notifications:
+ *   get:
+ *     summary: Obtener notificaciones del usuario
+ *     description: Obtiene una lista paginada de notificaciones del usuario actual
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Número de página
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Número de notificaciones por página
+ *       - in: query
+ *         name: unreadOnly
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *         description: Solo notificaciones no leídas
+ *       - in: query
+ *         name: type
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [info, warning, error, success]
+ *         description: Filtrar por tipo de notificación
+ *     responses:
+ *       200:
+ *         description: Lista de notificaciones obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 notifications:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Notification'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page: { type: integer }
+ *                     limit: { type: integer }
+ *                     total: { type: integer }
+ *                     totalPages: { type: integer }
+ *       400:
+ *         description: Error de validación
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/', verifyToken, [
   query('page').optional().isInt({ min: 1 }),
   query('limit').optional().isInt({ min: 1, max: 100 }),
@@ -64,7 +235,33 @@ router.get('/', verifyToken, [
   }
 });
 
-// Obtener conteo de notificaciones no leídas
+/**
+ * @swagger
+ * /api/notifications/unread-count:
+ *   get:
+ *     summary: Obtener conteo de notificaciones no leídas
+ *     description: Obtiene el número total de notificaciones no leídas del usuario
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Conteo obtenido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 unreadCount:
+ *                   type: integer
+ *                   description: Número de notificaciones no leídas
+ *       400:
+ *         description: Error al obtener el conteo
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/unread-count', verifyToken, async (req, res) => {
   try {
     const { count, error } = await supabase
@@ -85,7 +282,45 @@ router.get('/unread-count', verifyToken, async (req, res) => {
   }
 });
 
-// Marcar notificación como leída
+/**
+ * @swagger
+ * /api/notifications/{id}/read:
+ *   put:
+ *     summary: Marcar notificación como leída
+ *     description: Marca una notificación específica como leída
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID de la notificación
+ *     responses:
+ *       200:
+ *         description: Notificación marcada como leída exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Notificación marcada como leída"
+ *                 notification:
+ *                   $ref: '#/components/schemas/Notification'
+ *       404:
+ *         description: Notificación no encontrada
+ *       400:
+ *         description: Error al marcar como leída
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.put('/:id/read', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -126,7 +361,36 @@ router.put('/:id/read', verifyToken, async (req, res) => {
   }
 });
 
-// Marcar todas las notificaciones como leídas
+/**
+ * @swagger
+ * /api/notifications/read-all:
+ *   put:
+ *     summary: Marcar todas las notificaciones como leídas
+ *     description: Marca todas las notificaciones no leídas del usuario como leídas
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Todas las notificaciones marcadas como leídas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Todas las notificaciones marcadas como leídas"
+ *                 count:
+ *                   type: integer
+ *                   description: Número de notificaciones marcadas
+ *       400:
+ *         description: Error al marcar notificaciones
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.put('/read-all', verifyToken, async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -159,7 +423,43 @@ router.put('/read-all', verifyToken, async (req, res) => {
   }
 });
 
-// Eliminar notificación
+/**
+ * @swagger
+ * /api/notifications/{id}:
+ *   delete:
+ *     summary: Eliminar notificación
+ *     description: Elimina una notificación específica del usuario
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID de la notificación a eliminar
+ *     responses:
+ *       200:
+ *         description: Notificación eliminada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Notificación eliminada exitosamente"
+ *       404:
+ *         description: Notificación no encontrada
+ *       400:
+ *         description: Error al eliminar notificación
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.delete('/:id', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -195,7 +495,36 @@ router.delete('/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Eliminar todas las notificaciones leídas
+/**
+ * @swagger
+ * /api/notifications/read-all:
+ *   delete:
+ *     summary: Eliminar todas las notificaciones leídas
+ *     description: Elimina todas las notificaciones leídas del usuario
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Notificaciones leídas eliminadas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Todas las notificaciones leídas eliminadas"
+ *                 count:
+ *                   type: integer
+ *                   description: Número de notificaciones eliminadas
+ *       400:
+ *         description: Error al eliminar notificaciones
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.delete('/read-all', verifyToken, async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -228,7 +557,45 @@ router.delete('/read-all', verifyToken, async (req, res) => {
   }
 });
 
-// Crear notificación (solo para admins)
+/**
+ * @swagger
+ * /api/notifications:
+ *   post:
+ *     summary: Crear nueva notificación
+ *     description: Crea una nueva notificación para un usuario específico (solo admins)
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/NotificationCreate'
+ *     responses:
+ *       201:
+ *         description: Notificación creada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Notificación creada exitosamente"
+ *                 notification:
+ *                   $ref: '#/components/schemas/Notification'
+ *       400:
+ *         description: Error de validación
+ *       404:
+ *         description: Usuario destinatario no encontrado
+ *       403:
+ *         description: Solo los administradores pueden crear notificaciones
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.post('/', verifyToken, [
   body('userId').isUUID().withMessage('ID de usuario inválido'),
   body('title').trim().isLength({ min: 3, max: 255 }).withMessage('El título debe tener entre 3 y 255 caracteres'),
@@ -298,7 +665,48 @@ router.post('/', verifyToken, [
   }
 });
 
-// Crear notificación masiva (solo para admins)
+/**
+ * @swagger
+ * /api/notifications/broadcast:
+ *   post:
+ *     summary: Crear notificación masiva
+ *     description: Crea notificaciones para múltiples usuarios simultáneamente (solo admins)
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/NotificationBroadcast'
+ *     responses:
+ *       201:
+ *         description: Notificaciones enviadas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Notificaciones enviadas exitosamente"
+ *                 count:
+ *                   type: integer
+ *                   description: Número de notificaciones creadas
+ *                 notifications:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Notification'
+ *       400:
+ *         description: Error de validación o algunos usuarios no encontrados
+ *       403:
+ *         description: Solo los administradores pueden crear notificaciones masivas
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.post('/broadcast', verifyToken, [
   body('userIds').isArray({ min: 1 }).withMessage('Debe especificar al menos un usuario'),
   body('userIds.*').isUUID().withMessage('ID de usuario inválido'),
@@ -376,7 +784,52 @@ router.post('/broadcast', verifyToken, [
   }
 });
 
-// Obtener estadísticas de notificaciones (solo para admins)
+/**
+ * @swagger
+ * /api/notifications/stats/overview:
+ *   get:
+ *     summary: Obtener estadísticas de notificaciones
+ *     description: Obtiene estadísticas generales sobre notificaciones del sistema (solo admins)
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Estadísticas obtenidas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total:
+ *                   type: integer
+ *                   description: Total de notificaciones en el sistema
+ *                 byType:
+ *                   type: object
+ *                   properties:
+ *                     info: { type: integer }
+ *                     warning: { type: integer }
+ *                     error: { type: integer }
+ *                     success: { type: integer }
+ *                 byStatus:
+ *                   type: object
+ *                   properties:
+ *                     read: { type: integer }
+ *                     unread: { type: integer }
+ *                 recent:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Notification'
+ *                   description: Últimas 10 notificaciones creadas
+ *       400:
+ *         description: Error al obtener estadísticas
+ *       403:
+ *         description: Solo los administradores pueden ver estadísticas
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/stats/overview', verifyToken, async (req, res) => {
   try {
     if (req.user.profile.role !== 'admin') {

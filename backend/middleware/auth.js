@@ -19,8 +19,8 @@ const verifyToken = async (req, res, next) => {
       return res.status(401).json({ error: 'Token inválido o expirado' });
     }
 
-    // Obtener información adicional del usuario desde la base de datos
-    const { data: userProfile, error: profileError } = await supabase
+    // Obtener información adicional del usuario desde la base de datos usando supabaseAdmin
+    const { data: userProfile, error: profileError } = await require('../config/supabase').supabaseAdmin
       .from('user_profiles')
       .select('*')
       .eq('id', user.id)
@@ -28,6 +28,21 @@ const verifyToken = async (req, res, next) => {
 
     if (profileError) {
       console.error('Error obteniendo perfil de usuario:', profileError);
+      // Crear perfil por defecto si no existe
+      const defaultProfile = {
+        id: user.id,
+        email: user.email,
+        first_name: user.user_metadata?.first_name || 'Usuario',
+        last_name: user.user_metadata?.last_name || 'Prueba',
+        role: 'viewer',
+        is_active: true
+      };
+      
+      req.user = {
+        ...user,
+        profile: defaultProfile
+      };
+      return next();
     }
 
     req.user = {

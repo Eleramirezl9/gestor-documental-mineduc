@@ -7,7 +7,171 @@ const notificationService = require('../services/notificationService');
 
 const router = express.Router();
 
-// Obtener todos los workflows
+/**
+ * @swagger
+ * tags:
+ *   name: Workflows
+ *   description: Gestión de flujos de trabajo para aprobación de documentos
+ * 
+ * components:
+ *   schemas:
+ *     Workflow:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *           description: ID único del workflow
+ *         document_id:
+ *           type: string
+ *           format: uuid
+ *           description: ID del documento asociado
+ *         workflow_type:
+ *           type: string
+ *           enum: [approval, review, signature]
+ *           description: Tipo de workflow
+ *         status:
+ *           type: string
+ *           enum: [pending, in_progress, approved, rejected, cancelled]
+ *           description: Estado actual del workflow
+ *         requester_id:
+ *           type: string
+ *           format: uuid
+ *           description: ID del usuario que solicitó el workflow
+ *         current_approver_id:
+ *           type: string
+ *           format: uuid
+ *           description: ID del aprobador actual
+ *         priority:
+ *           type: string
+ *           enum: [low, medium, high, urgent]
+ *           description: Prioridad del workflow
+ *         due_date:
+ *           type: string
+ *           format: date-time
+ *           description: Fecha límite de aprobación
+ *         comments:
+ *           type: string
+ *           description: Comentarios del workflow
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *           description: Fecha de creación
+ *         completed_at:
+ *           type: string
+ *           format: date-time
+ *           description: Fecha de completado
+ *     
+ *     WorkflowCreate:
+ *       type: object
+ *       required:
+ *         - documentId
+ *         - approvers
+ *       properties:
+ *         documentId:
+ *           type: string
+ *           format: uuid
+ *           description: ID del documento para el workflow
+ *         workflowType:
+ *           type: string
+ *           enum: [approval, review, signature]
+ *           default: approval
+ *           description: Tipo de workflow
+ *         priority:
+ *           type: string
+ *           enum: [low, medium, high, urgent]
+ *           default: medium
+ *           description: Prioridad del workflow
+ *         dueDate:
+ *           type: string
+ *           format: date-time
+ *           description: Fecha límite de aprobación
+ *         comments:
+ *           type: string
+ *           maxLength: 1000
+ *           description: Comentarios iniciales
+ *         approvers:
+ *           type: array
+ *           items:
+ *             type: string
+ *             format: uuid
+ *           minItems: 1
+ *           description: Lista de IDs de aprobadores en orden
+ */
+
+/**
+ * @swagger
+ * /api/workflows:
+ *   get:
+ *     summary: Obtener lista de workflows
+ *     description: Obtiene una lista paginada de workflows con filtros opcionales
+ *     tags: [Workflows]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Número de página
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Número de workflows por página
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [pending, in_progress, approved, rejected, cancelled]
+ *         description: Filtrar por estado
+ *       - in: query
+ *         name: priority
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [low, medium, high, urgent]
+ *         description: Filtrar por prioridad
+ *       - in: query
+ *         name: assignedToMe
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *         description: Solo workflows asignados al usuario actual
+ *     responses:
+ *       200:
+ *         description: Lista de workflows obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 workflows:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Workflow'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page: { type: integer }
+ *                     limit: { type: integer }
+ *                     total: { type: integer }
+ *                     totalPages: { type: integer }
+ *       400:
+ *         description: Error de validación
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/', verifyToken, [
   query('page').optional().isInt({ min: 1 }),
   query('limit').optional().isInt({ min: 1, max: 100 }),
@@ -26,13 +190,13 @@ router.get('/', verifyToken, [
     const offset = (page - 1) * limit;
     const { status, priority, assignedToMe } = req.query;
 
-    let query = supabase
-      .from('workflows_full')
+    let query = require('../config/supabase').supabaseAdmin
+      .from('workflows')
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false });
 
     // Filtros según el rol del usuario
-    if (req.user.profile.role !== 'admin') {
+    if (req.user?.profile?.role !== 'admin') {
       if (assignedToMe === 'true') {
         query = query.eq('current_approver_id', req.user.id);
       } else {
@@ -74,7 +238,56 @@ router.get('/', verifyToken, [
   }
 });
 
-// Obtener workflow por ID
+/**
+ * @swagger
+ * /api/workflows/{id}:
+ *   get:
+ *     summary: Obtener workflow por ID
+ *     description: Obtiene un workflow específico con sus pasos detallados
+ *     tags: [Workflows]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID único del workflow
+ *     responses:
+ *       200:
+ *         description: Workflow obtenido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 workflow:
+ *                   allOf:
+ *                     - $ref: '#/components/schemas/Workflow'
+ *                     - type: object
+ *                       properties:
+ *                         steps:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             properties:
+ *                               id: { type: string, format: uuid }
+ *                               step_order: { type: integer }
+ *                               status: { type: string }
+ *                               approver_id: { type: string, format: uuid }
+ *                               comments: { type: string }
+ *                               decision_date: { type: string, format: date-time }
+ *       404:
+ *         description: Workflow no encontrado
+ *       403:
+ *         description: No tienes permisos para ver este workflow
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/:id', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -123,7 +336,45 @@ router.get('/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Crear nuevo workflow
+/**
+ * @swagger
+ * /api/workflows:
+ *   post:
+ *     summary: Crear nuevo workflow
+ *     description: Crea un nuevo workflow de aprobación para un documento
+ *     tags: [Workflows]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/WorkflowCreate'
+ *     responses:
+ *       201:
+ *         description: Workflow creado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Workflow creado exitosamente"
+ *                 workflow:
+ *                   $ref: '#/components/schemas/Workflow'
+ *       400:
+ *         description: Error de validación o documento ya tiene workflow activo
+ *       404:
+ *         description: Documento no encontrado
+ *       403:
+ *         description: No tienes permisos para crear workflows para este documento
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.post('/', verifyToken, requireRole(['admin', 'editor']), [
   body('documentId').isUUID().withMessage('ID de documento inválido'),
   body('workflowType').optional().isIn(['approval', 'review', 'signature']),
@@ -241,7 +492,61 @@ router.post('/', verifyToken, requireRole(['admin', 'editor']), [
   }
 });
 
-// Aprobar paso del workflow
+/**
+ * @swagger
+ * /api/workflows/{id}/approve:
+ *   post:
+ *     summary: Aprobar paso del workflow
+ *     description: Aprueba el paso actual del workflow si eres el aprobador asignado
+ *     tags: [Workflows]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del workflow
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               comments:
+ *                 type: string
+ *                 maxLength: 1000
+ *                 description: Comentarios de la aprobación
+ *     responses:
+ *       200:
+ *         description: Paso aprobado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Paso aprobado exitosamente"
+ *                 workflow:
+ *                   $ref: '#/components/schemas/Workflow'
+ *                 isCompleted:
+ *                   type: boolean
+ *                   description: Indica si el workflow se completó con esta aprobación
+ *       400:
+ *         description: Error de validación o workflow en estado incorrecto
+ *       404:
+ *         description: Workflow no encontrado
+ *       403:
+ *         description: No eres el aprobador actual
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.post('/:id/approve', verifyToken, [
   body('comments').optional().trim().isLength({ max: 1000 })
 ], async (req, res) => {
@@ -377,7 +682,61 @@ router.post('/:id/approve', verifyToken, [
   }
 });
 
-// Rechazar workflow
+/**
+ * @swagger
+ * /api/workflows/{id}/reject:
+ *   post:
+ *     summary: Rechazar workflow
+ *     description: Rechaza el workflow actual (requiere comentarios explicativos)
+ *     tags: [Workflows]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del workflow
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - comments
+ *             properties:
+ *               comments:
+ *                 type: string
+ *                 minLength: 10
+ *                 maxLength: 1000
+ *                 description: Comentarios explicando el rechazo (requerido)
+ *     responses:
+ *       200:
+ *         description: Workflow rechazado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Workflow rechazado exitosamente"
+ *                 workflow:
+ *                   $ref: '#/components/schemas/Workflow'
+ *       400:
+ *         description: Error de validación o workflow en estado incorrecto
+ *       404:
+ *         description: Workflow no encontrado
+ *       403:
+ *         description: No eres el aprobador actual
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.post('/:id/reject', verifyToken, [
   body('comments').trim().isLength({ min: 10, max: 1000 }).withMessage('Los comentarios son requeridos para rechazar (mínimo 10 caracteres)')
 ], async (req, res) => {
@@ -483,7 +842,61 @@ router.post('/:id/reject', verifyToken, [
   }
 });
 
-// Cancelar workflow
+/**
+ * @swagger
+ * /api/workflows/{id}/cancel:
+ *   post:
+ *     summary: Cancelar workflow
+ *     description: Cancela un workflow en progreso (solo solicitante o admin)
+ *     tags: [Workflows]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del workflow
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - reason
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 minLength: 10
+ *                 maxLength: 500
+ *                 description: Razón de la cancelación (requerida)
+ *     responses:
+ *       200:
+ *         description: Workflow cancelado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Workflow cancelado exitosamente"
+ *                 workflow:
+ *                   $ref: '#/components/schemas/Workflow'
+ *       400:
+ *         description: Error de validación o workflow no puede ser cancelado
+ *       404:
+ *         description: Workflow no encontrado
+ *       403:
+ *         description: No tienes permisos para cancelar este workflow
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.post('/:id/cancel', verifyToken, [
   body('reason').trim().isLength({ min: 10, max: 500 }).withMessage('La razón de cancelación es requerida (mínimo 10 caracteres)')
 ], async (req, res) => {
@@ -574,11 +987,57 @@ router.post('/:id/cancel', verifyToken, [
   }
 });
 
-// Obtener estadísticas de workflows
+/**
+ * @swagger
+ * /api/workflows/stats/overview:
+ *   get:
+ *     summary: Obtener estadísticas de workflows
+ *     description: Obtiene estadísticas generales sobre workflows por estado y vencimiento
+ *     tags: [Workflows]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Estadísticas obtenidas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total:
+ *                   type: integer
+ *                   description: Total de workflows
+ *                 pending:
+ *                   type: integer
+ *                   description: Workflows pendientes
+ *                 in_progress:
+ *                   type: integer
+ *                   description: Workflows en progreso
+ *                 approved:
+ *                   type: integer
+ *                   description: Workflows aprobados
+ *                 rejected:
+ *                   type: integer
+ *                   description: Workflows rechazados
+ *                 cancelled:
+ *                   type: integer
+ *                   description: Workflows cancelados
+ *                 overdue:
+ *                   type: integer
+ *                   description: Workflows vencidos
+ *       400:
+ *         description: Error al obtener estadísticas
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Permisos insuficientes
+ *       500:
+ *         description: Error interno del servidor
+ */
 router.get('/stats/overview', verifyToken, requireRole(['admin', 'editor']), async (req, res) => {
   try {
     // Obtener conteos por estado
-    const { data: statusStats, error: statusError } = await supabase
+    const { data: statusStats, error: statusError } = await require('../config/supabase').supabaseAdmin
       .from('workflows')
       .select('status');
 

@@ -6,7 +6,115 @@ const auditService = require('../services/auditService');
 
 const router = express.Router();
 
-// Registro de usuario
+/**
+ * @swagger
+ * tags:
+ *   name: Authentication
+ *   description: Gestión de autenticación y autorización de usuarios
+ * 
+ * components:
+ *   schemas:
+ *     RegisterRequest:
+ *       type: object
+ *       required:
+ *         - email
+ *         - password
+ *         - firstName
+ *         - lastName
+ *         - role
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *           description: Correo electrónico del usuario
+ *         password:
+ *           type: string
+ *           minLength: 8
+ *           description: Contraseña del usuario (mínimo 8 caracteres)
+ *         firstName:
+ *           type: string
+ *           minLength: 2
+ *           description: Nombre del usuario
+ *         lastName:
+ *           type: string
+ *           minLength: 2
+ *           description: Apellido del usuario
+ *         role:
+ *           type: string
+ *           enum: [admin, editor, viewer]
+ *           description: Rol del usuario en el sistema
+ *         department:
+ *           type: string
+ *           description: Departamento al que pertenece el usuario
+ *     
+ *     LoginRequest:
+ *       type: object
+ *       required:
+ *         - email
+ *         - password
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *           description: Correo electrónico del usuario
+ *         password:
+ *           type: string
+ *           description: Contraseña del usuario
+ *     
+ *     ChangePasswordRequest:
+ *       type: object
+ *       required:
+ *         - currentPassword
+ *         - newPassword
+ *       properties:
+ *         currentPassword:
+ *           type: string
+ *           description: Contraseña actual del usuario
+ *         newPassword:
+ *           type: string
+ *           minLength: 8
+ *           description: Nueva contraseña (mínimo 8 caracteres)
+ */
+
+/**
+ * @swagger
+ * /api/auth/register:
+ *   post:
+ *     summary: Registrar un nuevo usuario
+ *     description: Crea una nueva cuenta de usuario en el sistema
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RegisterRequest'
+ *     responses:
+ *       201:
+ *         description: Usuario registrado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Usuario registrado exitosamente"
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *       400:
+ *         description: Error de validación o datos incorrectos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Error interno del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.post('/register', [
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 8 }).withMessage('La contraseña debe tener al menos 8 caracteres'),
@@ -78,7 +186,54 @@ router.post('/register', [
   }
 });
 
-// Inicio de sesión
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Iniciar sesión
+ *     description: Autentica un usuario y devuelve un token de sesión
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
+ *     responses:
+ *       200:
+ *         description: Inicio de sesión exitoso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Inicio de sesión exitoso"
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *                 session:
+ *                   type: object
+ *                   description: Información de la sesión de Supabase
+ *       401:
+ *         description: Credenciales inválidas o usuario inactivo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       400:
+ *         description: Error de validación
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Error interno del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.post('/login', [
   body('email').isEmail().normalizeEmail(),
   body('password').notEmpty().withMessage('La contraseña es requerida')
@@ -141,7 +296,45 @@ router.post('/login', [
   }
 });
 
-// Cerrar sesión
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Cerrar sesión
+ *     description: Cierra la sesión del usuario actual
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Sesión cerrada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Sesión cerrada exitosamente"
+ *       400:
+ *         description: Error al cerrar sesión
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Token no válido o ausente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Error interno del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.post('/logout', verifyToken, async (req, res) => {
   try {
     const { error } = await supabase.auth.signOut();
@@ -166,7 +359,38 @@ router.post('/logout', verifyToken, async (req, res) => {
   }
 });
 
-// Obtener perfil del usuario actual
+/**
+ * @swagger
+ * /api/auth/profile:
+ *   get:
+ *     summary: Obtener perfil del usuario actual
+ *     description: Devuelve la información del perfil del usuario autenticado
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Perfil obtenido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Token no válido o ausente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Error interno del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.get('/profile', verifyToken, async (req, res) => {
   try {
     res.json({
@@ -178,7 +402,51 @@ router.get('/profile', verifyToken, async (req, res) => {
   }
 });
 
-// Cambiar contraseña
+/**
+ * @swagger
+ * /api/auth/change-password:
+ *   put:
+ *     summary: Cambiar contraseña
+ *     description: Permite al usuario cambiar su contraseña actual
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ChangePasswordRequest'
+ *     responses:
+ *       200:
+ *         description: Contraseña cambiada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Contraseña cambiada exitosamente"
+ *       400:
+ *         description: Error de validación o contraseña incorrecta
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Token no válido o ausente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Error interno del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.put('/change-password', verifyToken, [
   body('currentPassword').notEmpty().withMessage('La contraseña actual es requerida'),
   body('newPassword').isLength({ min: 8 }).withMessage('La nueva contraseña debe tener al menos 8 caracteres')

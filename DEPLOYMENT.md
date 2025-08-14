@@ -182,7 +182,8 @@ gestor-documental-mineduc-geiwa73j9.vercel.app
 
 ### 5.2 Configurar CORS en Backend
 
-El backend ya está configurado para aceptar requests desde cualquier origen, pero verifica que funcione correctamente.
+Actualiza la variable `FRONTEND_URL` en Render con la URL real de tu frontend:
+`FRONTEND_URL=https://tu-frontend.vercel.app`
 
 ### 5.3 Configurar Dominio Personalizado (Opcional)
 
