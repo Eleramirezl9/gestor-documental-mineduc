@@ -142,7 +142,7 @@ VITE_APP_VERSION=1.0.0
 1. Clic en "Deploy"
 2. Espera a que termine el despliegue (3-5 minutos)
 3. Anota la URL: `https://tu-frontend.vercel.app`
-
+gestor-documental-mineduc-geiwa73j9.vercel.app
 ## 👤 Paso 4: Crear Usuarios Iniciales
 
 ### 4.1 Crear Usuarios en Supabase Auth
