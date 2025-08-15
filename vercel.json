@@ -9,5 +9,10 @@
             }
         }
     ],
+    "env": {
+        "VITE_API_BASE_URL": "https://gestor-documental-mineduc-backend.onrender.com",
+        "VITE_SUPABASE_URL": "https://vyhyyddvktqfjrsogwtf.supabase.co",
+        "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5aHl5ZGR2a3RxZmpyc29nd3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwNDMwMzYsImV4cCI6MjA3MDYxOTAzNn0.Wex1jbTbtSL4ieUXPkwVe4SEkn-GsZLh-wQ8IEhQZt4"
+    },
     "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
