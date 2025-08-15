@@ -2,7 +2,18 @@ import axios from 'axios'
 import { supabase } from './supabase'
 
 // Configuración base de la API
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+const API_BASE_URL = import.meta.env.PROD 
+  ? 'https://gestor-documental-mineduc-backend.onrender.com'
+  : import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+
+// Debug para verificar la URL en producción
+console.log('🔧 API Configuration:', {
+  VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
+  API_BASE_URL,
+  NODE_ENV: import.meta.env.NODE_ENV,
+  PROD: import.meta.env.PROD,
+  MODE: import.meta.env.MODE
+})
 
 // Crear instancia de axios
 const api = axios.create({
