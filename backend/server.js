@@ -31,7 +31,7 @@ const swaggerOptions = {
       {
         url: process.env.NODE_ENV === 'production' 
           ? process.env.API_BASE_URL || "https://gestor-documental-mineduc-backend.onrender.com"
-          : "http://localhost:5000",
+          : `http://localhost:${PORT}`,
         description: process.env.NODE_ENV === 'production' ? "Servidor de Producción" : "Servidor de Desarrollo"
       }
     ],
@@ -151,26 +151,37 @@ const authLimiter = rateLimit({
 app.use(generalLimiter);
 app.use('/api/auth', authLimiter);
 
-// CORS - configuración simplificada para desarrollo
-if (process.env.NODE_ENV === 'development') {
-  app.use(cors({
-    origin: true, // Permitir todos los orígenes en desarrollo
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-  }));
-} else {
-  // Configuración más estricta para producción
-  app.use(cors({
-    origin: [
+// CORS - configuración dinámica para desarrollo y producción
+const corsOptions = {
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3000',
       'https://gestor-documental-mineduc.vercel.app',
       process.env.FRONTEND_URL
-    ].filter(Boolean),
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-  }));
-}
+    ].filter(Boolean);
+    
+    // Permitir requests sin origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true); // Permitir todo en desarrollo
+    }
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('No permitido por política CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'X-Requested-With'],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 
 // Logging
 app.use(morgan("combined"));
@@ -193,13 +204,63 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: `
     .topbar-wrapper img { content: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='); }
     .swagger-ui .topbar { background-color: #1976d2; }
+    .swagger-ui .auth-wrapper { margin-bottom: 20px; }
+    .swagger-ui .auth-container .auth-btn-wrapper { margin-top: 10px; }
+    .swagger-ui .info { margin-bottom: 30px; }
+    .auth-instructions {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 5px;
+      padding: 15px;
+      margin: 20px 0;
+    }
+  `,
+  customJsStr: `
+    // Agregar instrucciones de autenticación
+    window.onload = function() {
+      setTimeout(function() {
+        const infoSection = document.querySelector('.swagger-ui .info');
+        if (infoSection && !document.querySelector('.auth-instructions')) {
+          const authInstructions = document.createElement('div');
+          authInstructions.className = 'auth-instructions';
+          authInstructions.innerHTML = \`
+            <h4>🔐 Cómo usar la autenticación JWT:</h4>
+            <ol>
+              <li>Primero, haz login en <strong>POST /api/auth/login</strong> con tu email y contraseña</li>
+              <li>Copia el token de la respuesta</li>
+              <li>Haz clic en el botón <strong>"Authorize"</strong> arriba</li>
+              <li>Ingresa el token (no agregues "Bearer ", se agrega automáticamente)</li>
+              <li>Ahora puedes usar todas las rutas protegidas</li>
+            </ol>
+            <p><strong>Usuarios de prueba:</strong></p>
+            <ul>
+              <li>Admin: admin@mineduc.gob.gt</li>
+              <li>Editor: editor@mineduc.gob.gt</li>
+              <li>Viewer: viewer@mineduc.gob.gt</li>
+            </ul>
+          \`;
+          infoSection.parentNode.insertBefore(authInstructions, infoSection.nextSibling);
+        }
+      }, 1000);
+    };
   `,
   swaggerOptions: {
     persistAuthorization: true,
     displayRequestDuration: true,
     filter: true,
     showExtensions: true,
-    showCommonExtensions: true
+    showCommonExtensions: true,
+    docExpansion: 'list',
+    defaultModelsExpandDepth: 2,
+    defaultModelExpandDepth: 2,
+    tryItOutEnabled: true,
+    requestInterceptor: function(req) {
+      // Log para debug en desarrollo
+      if (window.location.hostname === 'localhost') {
+        console.log('Swagger Request:', req);
+      }
+      return req;
+    }
   }
 }));
 
@@ -211,6 +272,7 @@ app.use("/api/workflows", require("./routes/workflows"));
 app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/reports", require("./routes/reports"));
 app.use("/api/audit", require("./routes/audit"));
+app.use("/api/settings", require("./routes/settings"));
 
 /**
  * @swagger

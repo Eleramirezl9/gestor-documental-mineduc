@@ -14,6 +14,7 @@ npm run dev          # Start development server with nodemon
 npm start            # Start production server  
 npm test             # Run Jest tests
 npm run test:watch   # Run tests in watch mode
+npm run build        # No build step required (outputs message)
 ```
 
 ### Frontend (`frontend/`)
@@ -22,6 +23,7 @@ npm run dev          # Start Vite dev server with --host
 npm run build        # Build for production
 npm run lint         # Run ESLint
 npm run preview      # Preview production build with --host
+npm start            # Alias for npm run preview
 ```
 
 ## Architecture
@@ -72,7 +74,29 @@ Test users: admin@mineduc.gob.gt, editor@mineduc.gob.gt, viewer@mineduc.gob.gt
 
 ## Key Configuration Files
 
-- `frontend/vite.config.js` - Vite config with path aliases (`@` → `./src`)
+- `frontend/vite.config.js` - Vite config with path aliases (`@` → `./src`), React + Tailwind CSS plugins
+- `frontend/eslint.config.js` - ESLint config with React hooks rules and unused vars handling
 - `vercel.json` - Frontend deployment configuration
 - `backend/render.yaml` - Backend deployment configuration  
+- `backend/server.js` - Express server with Swagger API documentation setup
 - Health check available at `/health` endpoint
+
+## Development Notes
+
+- Frontend uses **pnpm** as package manager (see `packageManager` field)
+- Backend has comprehensive Swagger API documentation setup with JWT auth
+- ESLint configured to ignore unused variables starting with capital letters or underscores
+- Both dev servers run with `--host` flag for network access
+
+## Authentication & Security
+
+**JWT Authentication**: Supabase Auth integration with custom middleware. All protected routes require `Authorization: Bearer <token>` header.
+
+**CORS Configuration**: Dynamic CORS setup supporting both development (`localhost:5173`, `localhost:3000`) and production URLs with proper credentials handling.
+
+**API Testing**: 
+- Swagger UI available at `/api-docs` with built-in JWT authentication
+- Test script: `node backend/test_auth_flow.js` to verify auth flow
+- Complete authentication guide in `backend/docs/JWT_AUTHENTICATION_GUIDE.md`
+
+**Rate Limiting**: Different limits for auth routes (5 req/15min) vs general routes (100 req/15min).

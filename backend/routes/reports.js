@@ -259,6 +259,119 @@ router.get('/documents', verifyToken, requireRole(['admin', 'editor']), [
 
 /**
  * @swagger
+ * /api/reports/users:
+ *   get:
+ *     summary: Generar estadísticas de usuarios
+ *     description: Genera estadísticas sobre usuarios del sistema
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: period
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [7days, 30days, 3months, 1year]
+ *         description: Período de tiempo para las estadísticas
+ *     responses:
+ *       200:
+ *         description: Estadísticas de usuarios generadas exitosamente
+ */
+router.get('/users', verifyToken, async (req, res) => {
+  try {
+    const { period = '30days' } = req.query;
+    
+    // Calcular fechas según el período
+    const now = new Date();
+    let startDate = new Date();
+    
+    switch (period) {
+      case '7days':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case '30days':
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case '3months':
+        startDate.setMonth(now.getMonth() - 3);
+        break;
+      case '1year':
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      default:
+        startDate.setDate(now.getDate() - 30);
+    }
+
+    // Estadísticas simuladas (en un caso real, consultarías la base de datos)
+    const stats = {
+      active: 45,
+      growth: 12.5,
+      top_active: [
+        { id: '1', name: 'Juan Pérez', email: 'juan@mineduc.gob.gt', activity_count: 28 },
+        { id: '2', name: 'María García', email: 'maria@mineduc.gob.gt', activity_count: 22 },
+        { id: '3', name: 'Carlos López', email: 'carlos@mineduc.gob.gt', activity_count: 19 }
+      ]
+    };
+
+    res.json({
+      success: true,
+      data: stats
+    });
+
+  } catch (error) {
+    console.error('Error generando estadísticas de usuarios:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/reports/activity:
+ *   get:
+ *     summary: Generar estadísticas de actividad
+ *     description: Genera estadísticas de actividad del sistema
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: period
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [7days, 30days, 3months, 1year]
+ *         description: Período de tiempo para las estadísticas
+ *     responses:
+ *       200:
+ *         description: Estadísticas de actividad generadas exitosamente
+ */
+router.get('/activity', verifyToken, async (req, res) => {
+  try {
+    const { period = '30days' } = req.query;
+    
+    // Estadísticas simuladas
+    const stats = {
+      daily_average: 125,
+      growth: 8.3,
+      avg_processing_time: '2.5s',
+      error_rate: '0.1%',
+      uptime: '99.9%'
+    };
+
+    res.json({
+      success: true,
+      data: stats
+    });
+
+  } catch (error) {
+    console.error('Error generando estadísticas de actividad:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
  * /api/reports/user-activity:
  *   get:
  *     summary: Generar reporte de actividad de usuarios

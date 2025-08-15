@@ -4,6 +4,11 @@ import { AuthProvider, useAuth } from './hooks/useAuth'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Documents from './pages/Documents'
+import Users from './pages/Users'
+import Reports from './pages/Reports'
+import Audit from './pages/Audit'
+import Settings from './pages/Settings'
 import './App.css'
 
 // Componente para rutas protegidas
@@ -57,7 +62,11 @@ function App() {
             }>
               <Route index element={<Navigate to="/dashboard" />} />
               <Route path="dashboard" element={<Dashboard />} />
-              {/* Aquí se agregarán más rutas protegidas */}
+              <Route path="documents" element={<Documents />} />
+              <Route path="users" element={<Users />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="audit" element={<Audit />} />
+              <Route path="settings" element={<Settings />} />
             </Route>
             
             {/* Ruta por defecto */}

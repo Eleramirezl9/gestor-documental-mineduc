@@ -55,8 +55,11 @@ export const authAPI = {
 export const usersAPI = {
   getAll: (params) => api.get('/users', { params }),
   getById: (id) => api.get(`/users/${id}`),
+  create: (userData) => api.post('/users', userData),
   update: (id, userData) => api.put(`/users/${id}`, userData),
   delete: (id) => api.delete(`/users/${id}`),
+  toggleStatus: (id) => api.put(`/users/${id}/toggle-status`),
+  invite: (inviteData) => api.post('/users/invite', inviteData),
   getStats: () => api.get('/users/stats/overview'),
 }
 
@@ -95,9 +98,11 @@ export const notificationsAPI = {
 
 // Reportes
 export const reportsAPI = {
-  getDocumentStats: (params) => api.get('/reports/documents', { params }),
+  getDocumentStats: (period) => api.get('/reports/documents', { params: { period } }),
+  getUserStats: (period) => api.get('/reports/users', { params: { period } }),
+  getActivityStats: (period) => api.get('/reports/activity', { params: { period } }),
+  getWorkflowStats: (period) => api.get('/reports/workflows', { params: { period } }),
   getUserActivity: (params) => api.get('/reports/user-activity', { params }),
-  getWorkflowStats: (params) => api.get('/reports/workflows', { params }),
   exportDocuments: (params) => api.get('/reports/export/documents', { 
     params, 
     responseType: 'blob' 
@@ -116,6 +121,14 @@ export const auditAPI = {
     params, 
     responseType: 'blob' 
   }),
+}
+
+// Configuración
+export const settingsAPI = {
+  getAll: () => api.get('/settings'),
+  update: (settings) => api.put('/settings', settings),
+  reset: () => api.post('/settings/reset'),
+  getSystemStatus: () => api.get('/settings/system-status'),
 }
 
 export default api

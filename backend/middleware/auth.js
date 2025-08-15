@@ -6,17 +6,53 @@ const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     
+    // Verificar que el header de autorización esté presente
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Token de acceso requerido' });
+      return res.status(401).json({ 
+        error: 'Token de acceso requerido',
+        code: 'MISSING_TOKEN',
+        message: 'Debe incluir el header Authorization: Bearer <token>'
+      });
     }
 
     const token = authHeader.substring(7);
+    
+    // Verificar que el token no esté vacío
+    if (!token || token.trim() === '') {
+      return res.status(401).json({ 
+        error: 'Token inválido',
+        code: 'EMPTY_TOKEN' 
+      });
+    }
     
     // Verificar token con Supabase
     const { data: { user }, error } = await supabase.auth.getUser(token);
     
     if (error || !user) {
-      return res.status(401).json({ error: 'Token inválido o expirado' });
+      // Determinar el tipo de error específico
+      let errorCode = 'INVALID_TOKEN';
+      let errorMessage = 'Token inválido o expirado';
+      
+      if (error?.message?.includes('expired')) {
+        errorCode = 'TOKEN_EXPIRED';
+        errorMessage = 'El token ha expirado, por favor inicie sesión nuevamente';
+      } else if (error?.message?.includes('invalid')) {
+        errorCode = 'TOKEN_INVALID';
+        errorMessage = 'Token inválido';
+      }
+      
+      return res.status(401).json({ 
+        error: errorMessage,
+        code: errorCode
+      });
+    }
+
+    // Verificar que el usuario esté activo
+    if (user.banned_until || user.email_confirmed_at === null) {
+      return res.status(403).json({ 
+        error: 'Cuenta de usuario inactiva o no verificada',
+        code: 'USER_INACTIVE'
+      });
     }
 
     // Obtener información adicional del usuario desde la base de datos usando supabaseAdmin
@@ -50,10 +86,54 @@ const verifyToken = async (req, res, next) => {
       profile: userProfile
     };
     
+    // Log de acceso exitoso (opcional en desarrollo)
+    if (process.env.NODE_ENV === 'production') {
+      console.log(`Acceso autorizado: ${user.email} (${userProfile.role}) - ${req.method} ${req.path}`);
+    }
+    
     next();
   } catch (error) {
-    console.error('Error en verificación de token:', error);
-    res.status(401).json({ error: 'Token inválido' });
+    console.error('Error en verificación de token:', {
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      path: req.path
+    });
+    
+    res.status(401).json({ 
+      error: 'Error interno en la verificación del token',
+      code: 'AUTH_ERROR'
+    });
+  }
+};
+
+// Middleware opcional para verificar token sin fallar
+const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      
+      if (!error && user) {
+        const { data: userProfile } = await require('../config/supabase').supabaseAdmin
+          .from('user_profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+          
+        if (userProfile) {
+          req.user = { ...user, profile: userProfile };
+        }
+      }
+    }
+    
+    next();
+  } catch (error) {
+    // En caso de error, continuar sin usuario autenticado
+    next();
   }
 };
 
@@ -100,6 +180,7 @@ const requirePermission = (permission) => {
 
 module.exports = {
   verifyToken,
+  optionalAuth,
   requireRole,
   requirePermission
 };
