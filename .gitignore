@@ -5,12 +5,20 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Environment variables
+# Environment variables - NUNCA SUBIR ESTOS ARCHIVOS
 .env
 .env.local
+.env.development
 .env.development.local
+.env.test
 .env.test.local
+.env.production
 .env.production.local
+backend/.env
+backend/.env.local
+backend/.env.development
+backend/.env.test
+backend/.env.production
 
 # Build outputs
 dist/
@@ -124,9 +132,34 @@ build/Release
 # Local development
 .local/
 
-.env
-backend/.env
+# Testing files (no subir archivos temporales de testing)
+test-*.cjs
+test-*.js
+*-test.cjs
+*-test.js
+TEST_*.md
+working-*.cjs
 
-# Añade estas líneas
-frontend/vercel.json
-frontend/gestor-documental-frontend/
+# Backup files
+*.bak
+*.backup
+root-*.json.bak
+root-*.lock.bak
+
+# Personal/Private files
+PERSONAL_*
+PRIVATE_*
+SECRET_*
+
+# Development notes
+NOTES.md
+TODO_PERSONAL.md
+
+# Sistema operativo y editores adicionales
+.vscode/
+.idea/
+*.code-workspace
+
+# Archivos de configuración local específicos
+.claude/
+.cursor/
