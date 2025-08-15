@@ -11,6 +11,16 @@
     ],
     "routes": [
         {
+            "src": "/api/(.*)",
+            "dest": "https://gestor-documental-mineduc-backend.onrender.com/api/$1"
+        },
+        {
+            "src": "/(.*\\.(js|css|ico|png|jpg|jpeg|gif|svg))",
+            "headers": {
+                "Cache-Control": "public, max-age=31536000, immutable"
+            }
+        },
+        {
             "src": "/(.*)",
             "dest": "/index.html"
         }
