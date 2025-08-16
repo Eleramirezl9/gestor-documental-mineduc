@@ -429,4 +429,619 @@ router.delete('/:id', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/notifications:
+ *   post:
+ *     summary: Crear nueva notificación
+ *     description: Crear una nueva notificación para uno o múltiples usuarios
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - message
+ *               - type
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 description: Título de la notificación
+ *               message:
+ *                 type: string
+ *                 description: Contenido de la notificación
+ *               type:
+ *                 type: string
+ *                 enum: [info, success, warning, error, document, user, system]
+ *                 description: Tipo de notificación
+ *               priority:
+ *                 type: string
+ *                 enum: [low, medium, high, urgent]
+ *                 default: medium
+ *                 description: Prioridad de la notificación
+ *               target_users:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: IDs de usuarios destinatarios (opcional)
+ *               requires_approval:
+ *                 type: boolean
+ *                 default: false
+ *                 description: Si requiere aprobación antes de enviarse
+ *               send_email:
+ *                 type: boolean
+ *                 default: false
+ *                 description: Si debe enviarse por email
+ *               data:
+ *                 type: object
+ *                 description: Datos adicionales
+ *     responses:
+ *       201:
+ *         description: Notificación creada exitosamente
+ *       400:
+ *         description: Datos inválidos
+ *       401:
+ *         description: Token no válido o ausente
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.post('/', verifyToken, [
+  body('title').notEmpty().withMessage('El título es requerido'),
+  body('message').notEmpty().withMessage('El mensaje es requerido'),
+  body('type').isIn(['info', 'success', 'warning', 'error', 'document', 'user', 'system']).withMessage('Tipo de notificación inválido'),
+  body('priority').optional().isIn(['low', 'medium', 'high', 'urgent']).withMessage('Prioridad inválida'),
+  body('target_users').optional().isArray().withMessage('target_users debe ser un array'),
+  body('requires_approval').optional().isBoolean().withMessage('requires_approval debe ser booleano'),
+  body('send_email').optional().isBoolean().withMessage('send_email debe ser booleano')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const {
+      title,
+      message,
+      type,
+      priority = 'medium',
+      target_users,
+      requires_approval = false,
+      send_email = false,
+      data = {}
+    } = req.body;
+
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Determinar usuarios destinatarios
+    let recipients = target_users || [userId];
+
+    // Si no es admin y quiere enviar a otros usuarios, requerir aprobación
+    const needsApproval = requires_approval || (userRole !== 'admin' && target_users && target_users.length > 1);
+    const status = needsApproval ? 'pending_approval' : 'active';
+
+    // Si requiere aprobación, solo crear una notificación pendiente
+    if (needsApproval) {
+      const { data: pendingNotification, error } = await supabase
+        .from('notifications')
+        .insert([{
+          user_id: userId, // Temporal, será reemplazado cuando se apruebe
+          title,
+          message,
+          type,
+          priority,
+          status: 'pending_approval',
+          created_by: userId,
+          data: {
+            ...data,
+            target_users: recipients,
+            send_email,
+            pending_approval: true
+          }
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      return res.status(201).json({
+        message: 'Notificación enviada para aprobación',
+        notification: pendingNotification,
+        requires_approval: true
+      });
+    }
+
+    // Crear notificaciones para todos los destinatarios
+    const notificationsToCreate = recipients.map(recipient_id => ({
+      user_id: recipient_id,
+      title,
+      message,
+      type,
+      priority,
+      status: 'active',
+      created_by: userId,
+      data: {
+        ...data,
+        send_email
+      }
+    }));
+
+    const { data: createdNotifications, error } = await supabase
+      .from('notifications')
+      .insert(notificationsToCreate)
+      .select();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    // TODO: Enviar por email si se solicita
+    if (send_email && (priority === 'high' || priority === 'urgent')) {
+      console.log('📧 Enviando notificaciones por email...');
+    }
+
+    // Registrar en auditoría
+    await auditService.log({
+      user_id: userId,
+      action: 'create_notification',
+      resource_type: 'notification',
+      resource_id: createdNotifications[0]?.id,
+      details: {
+        title,
+        type,
+        priority,
+        recipients_count: recipients.length
+      }
+    });
+
+    res.status(201).json({
+      message: `Notificación enviada a ${recipients.length} usuario(s)`,
+      notifications: createdNotifications,
+      requires_approval: false
+    });
+
+  } catch (error) {
+    console.error('Error creando notificación:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notifications/pending-approval:
+ *   get:
+ *     summary: Obtener notificaciones pendientes de aprobación (solo admins)
+ *     description: Lista todas las notificaciones que requieren aprobación
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de notificaciones pendientes
+ *       403:
+ *         description: Acceso denegado
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.get('/pending-approval', verifyToken, async (req, res) => {
+  try {
+    // Solo administradores pueden ver notificaciones pendientes
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado. Se requieren permisos de administrador.' });
+    }
+
+    const { data: pendingNotifications, error } = await supabase
+      .from('notifications')
+      .select(`
+        *,
+        creator:users!created_by (
+          id,
+          email,
+          name
+        )
+      `)
+      .eq('status', 'pending_approval')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    res.json({
+      notifications: pendingNotifications || [],
+      count: pendingNotifications?.length || 0
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo notificaciones pendientes:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notifications/{id}/approve:
+ *   put:
+ *     summary: Aprobar notificación pendiente (solo admins)
+ *     description: Aprueba y envía una notificación pendiente
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID de la notificación pendiente
+ *     responses:
+ *       200:
+ *         description: Notificación aprobada y enviada
+ *       403:
+ *         description: Acceso denegado
+ *       404:
+ *         description: Notificación no encontrada
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.put('/:id/approve', verifyToken, async (req, res) => {
+  try {
+    // Solo administradores pueden aprobar notificaciones
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado. Se requieren permisos de administrador.' });
+    }
+
+    const { id } = req.params;
+
+    // Obtener la notificación pendiente
+    const { data: pendingNotification, error: fetchError } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('id', id)
+      .eq('status', 'pending_approval')
+      .single();
+
+    if (fetchError || !pendingNotification) {
+      return res.status(404).json({ error: 'Notificación pendiente no encontrada' });
+    }
+
+    const targetUsers = pendingNotification.data?.target_users || [pendingNotification.user_id];
+
+    // Crear notificaciones para todos los usuarios destinatarios
+    const notificationsToCreate = targetUsers.map(user_id => ({
+      user_id,
+      title: pendingNotification.title,
+      message: pendingNotification.message,
+      type: pendingNotification.type,
+      priority: pendingNotification.priority,
+      status: 'active',
+      created_by: pendingNotification.created_by,
+      approved_by: req.user.id,
+      approved_at: new Date().toISOString(),
+      data: {
+        ...pendingNotification.data,
+        original_pending_id: id
+      }
+    }));
+
+    const { data: createdNotifications, error: createError } = await supabase
+      .from('notifications')
+      .insert(notificationsToCreate)
+      .select();
+
+    if (createError) {
+      return res.status(400).json({ error: createError.message });
+    }
+
+    // Eliminar la notificación pendiente
+    await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', id);
+
+    // Registrar en auditoría
+    await auditService.log({
+      user_id: req.user.id,
+      action: 'approve_notification',
+      resource_type: 'notification',
+      resource_id: id,
+      details: {
+        original_title: pendingNotification.title,
+        recipients_count: targetUsers.length,
+        creator_id: pendingNotification.created_by
+      }
+    });
+
+    res.json({
+      message: `Notificación aprobada y enviada a ${targetUsers.length} usuario(s)`,
+      notifications: createdNotifications
+    });
+
+  } catch (error) {
+    console.error('Error aprobando notificación:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notifications/{id}/reject:
+ *   put:
+ *     summary: Rechazar notificación pendiente (solo admins)
+ *     description: Rechaza una notificación pendiente de aprobación
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID de la notificación pendiente
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 description: Razón del rechazo
+ *     responses:
+ *       200:
+ *         description: Notificación rechazada
+ *       403:
+ *         description: Acceso denegado
+ *       404:
+ *         description: Notificación no encontrada
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.put('/:id/reject', verifyToken, [
+  body('reason').optional().isString().withMessage('La razón debe ser un texto')
+], async (req, res) => {
+  try {
+    // Solo administradores pueden rechazar notificaciones
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado. Se requieren permisos de administrador.' });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    // Actualizar el estado a rechazado
+    const { data, error } = await supabase
+      .from('notifications')
+      .update({
+        status: 'rejected',
+        rejected_by: req.user.id,
+        rejected_at: new Date().toISOString(),
+        data: {
+          rejection_reason: reason
+        }
+      })
+      .eq('id', id)
+      .eq('status', 'pending_approval')
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    if (!data) {
+      return res.status(404).json({ error: 'Notificación pendiente no encontrada' });
+    }
+
+    // Registrar en auditoría
+    await auditService.log({
+      user_id: req.user.id,
+      action: 'reject_notification',
+      resource_type: 'notification',
+      resource_id: id,
+      details: {
+        reason,
+        original_title: data.title,
+        creator_id: data.created_by
+      }
+    });
+
+    res.json({
+      message: 'Notificación rechazada',
+      reason
+    });
+
+  } catch (error) {
+    console.error('Error rechazando notificación:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notifications/stats:
+ *   get:
+ *     summary: Obtener estadísticas de notificaciones
+ *     description: Obtiene estadísticas detalladas de las notificaciones del usuario
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Estadísticas obtenidas exitosamente
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.get('/stats', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Obtener estadísticas básicas en paralelo
+    const [
+      totalResult,
+      unreadResult,
+      todayResult,
+      urgentResult,
+      typeStatsResult
+    ] = await Promise.all([
+      // Total de notificaciones activas
+      supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('status', 'active'),
+      
+      // No leídas
+      supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('is_read', false)
+        .eq('status', 'active'),
+      
+      // De hoy
+      supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .gte('created_at', new Date().toISOString().split('T')[0])
+        .eq('status', 'active'),
+      
+      // Urgentes no leídas
+      supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('priority', 'urgent')
+        .eq('is_read', false)
+        .eq('status', 'active'),
+      
+      // Por tipo y prioridad
+      supabase
+        .from('notifications')
+        .select('type, priority')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+    ]);
+
+    // Procesar estadísticas por tipo y prioridad
+    const typeStats = {};
+    const priorityStats = { low: 0, medium: 0, high: 0, urgent: 0 };
+
+    if (typeStatsResult.data) {
+      typeStatsResult.data.forEach(notif => {
+        typeStats[notif.type] = (typeStats[notif.type] || 0) + 1;
+        priorityStats[notif.priority] = (priorityStats[notif.priority] || 0) + 1;
+      });
+    }
+
+    res.json({
+      total: totalResult.count || 0,
+      unread: unreadResult.count || 0,
+      today: todayResult.count || 0,
+      urgent_unread: urgentResult.count || 0,
+      by_type: typeStats,
+      by_priority: priorityStats,
+      generated_at: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo estadísticas:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notifications/admin/stats:
+ *   get:
+ *     summary: Obtener estadísticas globales de notificaciones (solo admins)
+ *     description: Obtiene estadísticas del sistema completo de notificaciones
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Estadísticas globales obtenidas exitosamente
+ *       403:
+ *         description: Acceso denegado
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.get('/admin/stats', verifyToken, async (req, res) => {
+  try {
+    // Solo administradores
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado. Se requieren permisos de administrador.' });
+    }
+
+    const [
+      totalResult,
+      unreadResult,
+      pendingResult,
+      rejectedResult,
+      todayResult
+    ] = await Promise.all([
+      // Total de notificaciones
+      supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true }),
+      
+      // No leídas globales
+      supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_read', false)
+        .eq('status', 'active'),
+      
+      // Pendientes de aprobación
+      supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending_approval'),
+      
+      // Rechazadas
+      supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'rejected'),
+      
+      // Creadas hoy
+      supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', new Date().toISOString().split('T')[0])
+    ]);
+
+    res.json({
+      total: totalResult.count || 0,
+      unread_global: unreadResult.count || 0,
+      pending_approval: pendingResult.count || 0,
+      rejected: rejectedResult.count || 0,
+      created_today: todayResult.count || 0,
+      generated_at: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo estadísticas de admin:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 module.exports = router;
