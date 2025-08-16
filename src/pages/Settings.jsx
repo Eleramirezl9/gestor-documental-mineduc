@@ -20,6 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Badge } from '../components/ui/badge'
+import ThemeSettings from '../components/ThemeSettings'
 import { settingsAPI } from '../lib/api'
 import toast from 'react-hot-toast'
 
@@ -158,7 +159,7 @@ const Settings = () => {
 
   const InputField = ({ label, value, onChange, type = 'text', placeholder = '', suffix = '' }) => (
     <div className="space-y-1">
-      <label className="text-sm font-medium text-gray-700">{label}</label>
+      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
       <div className="flex items-center space-x-2">
         <Input
           type={type}
@@ -175,7 +176,7 @@ const Settings = () => {
   const ToggleField = ({ label, description, checked, onChange }) => (
     <div className="flex items-center justify-between">
       <div className="space-y-1">
-        <label className="text-sm font-medium text-gray-700">{label}</label>
+        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
         {description && <p className="text-xs text-gray-500">{description}</p>}
       </div>
       <Button
@@ -210,8 +211,8 @@ const Settings = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Configuración</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Configuración</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
             Gestiona la configuración del sistema y preferencias
           </p>
         </div>
@@ -226,6 +227,9 @@ const Settings = () => {
           </Button>
         </div>
       </div>
+
+      {/* Configuración de Tema */}
+      <ThemeSettings />
 
       {/* Configuraciones */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

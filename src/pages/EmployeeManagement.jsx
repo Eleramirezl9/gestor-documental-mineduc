@@ -251,7 +251,7 @@ const EmployeeManagement = () => {
                     id="status"
                     value={filters.status}
                     onChange={(e) => setFilters({...filters, status: e.target.value})}
-                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Todos</option>
                     <option value="critical">Crítico</option>
@@ -272,7 +272,7 @@ const EmployeeManagement = () => {
               ) : (
                 <div className="space-y-4">
                   {employees.map((employee) => (
-                    <div key={employee.id} className="border rounded-lg p-4">
+                    <div key={employee.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800">
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-3">
@@ -281,11 +281,11 @@ const EmployeeManagement = () => {
                             </h3>
                             {getStatusBadge(employee.overall_status)}
                           </div>
-                          <p className="text-sm text-gray-600">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
                             {employee.email} • {employee.department}
                           </p>
                           {employee.position && (
-                            <p className="text-sm text-gray-500">{employee.position}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{employee.position}</p>
                           )}
                         </div>
                         <div className="text-right">

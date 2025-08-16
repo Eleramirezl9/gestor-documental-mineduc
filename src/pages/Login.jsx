@@ -9,6 +9,7 @@ import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { useAuth } from '../hooks/useAuth'
+import ThemeToggle from '../components/ThemeToggle'
 import toast from 'react-hot-toast'
 
 const loginSchema = z.object({
@@ -45,7 +46,12 @@ const Login = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 px-4">
+      {/* Botón de tema en la esquina superior derecha */}
+      <div className="absolute top-4 right-4">
+        <ThemeToggle variant="outline" showText />
+      </div>
+      
       <div className="w-full max-w-md">
         {/* Logo y título */}
         <div className="text-center mb-8">

@@ -29,6 +29,7 @@ import {
 } from './ui/dropdown-menu'
 import { useAuth } from '../hooks/useAuth'
 import IntuitivNotificationCenter from './IntuitivNotificationCenter'
+import ThemeToggle from './ThemeToggle'
 import toast from 'react-hot-toast'
 
 const Layout = () => {
@@ -61,11 +62,11 @@ const Layout = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Sidebar móvil */}
       <div className={`fixed inset-0 z-50 lg:hidden ${sidebarOpen ? 'block' : 'hidden'}`}>
         <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
-        <div className="fixed inset-y-0 left-0 flex w-64 flex-col bg-white">
+        <div className="fixed inset-y-0 left-0 flex w-64 flex-col bg-white dark:bg-gray-900">
           <div className="flex h-16 items-center justify-between px-4">
             <img
               className="h-8 w-auto"
@@ -95,7 +96,7 @@ const Layout = () => {
                   className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors ${
                     isCurrentPath(item.href)
                       ? 'bg-primary text-primary-foreground'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                   }`}
                   onClick={() => setSidebarOpen(false)}
                 >
@@ -110,7 +111,7 @@ const Layout = () => {
 
       {/* Sidebar desktop */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
-        <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
+        <div className="flex flex-col flex-grow bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700">
           <div className="flex h-16 items-center px-4">
             <img
               className="h-8 w-auto"
@@ -133,7 +134,7 @@ const Layout = () => {
                   className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors ${
                     isCurrentPath(item.href)
                       ? 'bg-primary text-primary-foreground'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                   }`}
                 >
                   <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
@@ -148,7 +149,7 @@ const Layout = () => {
       {/* Contenido principal */}
       <div className="lg:pl-64">
         {/* Header */}
-        <div className="sticky top-0 z-40 bg-white shadow-sm border-b border-gray-200">
+        <div className="sticky top-0 z-40 bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700">
           <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
             <div className="flex items-center">
               <Button
@@ -173,6 +174,9 @@ const Layout = () => {
             </div>
 
             <div className="flex items-center space-x-4">
+              {/* Cambio de tema */}
+              <ThemeToggle />
+              
               {/* Notificaciones */}
               <IntuitivNotificationCenter />
 
