@@ -10,6 +10,8 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Updated with complete notification system - 2025-08-16
+
 // Configuración de Swagger
 const swaggerOptions = {
   definition: {
