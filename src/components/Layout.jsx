@@ -12,7 +12,8 @@ import {
   LogOut,
   User,
   Shield,
-  Home
+  Home,
+  Bot
 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -40,6 +41,7 @@ const Layout = () => {
     { name: 'Documentos', href: '/documents', icon: FileText },
     { name: 'Usuarios', href: '/users', icon: Users },
     { name: 'Notificaciones', href: '/notifications', icon: Bell },
+    { name: 'Automatización', href: '/automation', icon: Bot, adminOnly: true },
     { name: 'Reportes', href: '/reports', icon: BarChart3 },
     { name: 'Auditoría', href: '/audit', icon: Shield },
     { name: 'Configuración', href: '/settings', icon: Settings },
@@ -82,7 +84,7 @@ const Layout = () => {
             </Button>
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4">
-            {navigation.map((item) => {
+            {navigation.filter(item => !item.adminOnly || user?.role === 'admin').map((item) => {
               const Icon = item.icon
               return (
                 <Link
@@ -120,7 +122,7 @@ const Layout = () => {
             <span className="ml-2 text-xl font-bold text-primary hidden">MINEDUC</span>
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4">
-            {navigation.map((item) => {
+            {navigation.filter(item => !item.adminOnly || user?.role === 'admin').map((item) => {
               const Icon = item.icon
               return (
                 <Link

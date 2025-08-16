@@ -277,6 +277,7 @@ app.use("/api/users", require("./routes/users"));
 app.use("/api/documents", require("./routes/documents"));
 app.use("/api/workflows", require("./routes/workflows"));
 app.use("/api/notifications", require("./routes/notifications"));
+app.use("/api/automated-notifications", require("./routes/automatedNotifications"));
 app.use("/api/reports", require("./routes/reports"));
 app.use("/api/audit", require("./routes/audit"));
 app.use("/api/settings", require("./routes/settings"));

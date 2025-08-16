@@ -10,6 +10,7 @@ import Reports from './pages/Reports'
 import Audit from './pages/Audit'
 import Settings from './pages/Settings'
 import Notifications from './pages/Notifications'
+import NotificationAutomation from './pages/NotificationAutomation'
 import './App.css'
 
 // Componente para rutas protegidas
@@ -68,6 +69,7 @@ function App() {
               <Route path="reports" element={<Reports />} />
               <Route path="audit" element={<Audit />} />
               <Route path="notifications" element={<Notifications />} />
+              <Route path="automation" element={<NotificationAutomation />} />
               <Route path="settings" element={<Settings />} />
             </Route>
             
