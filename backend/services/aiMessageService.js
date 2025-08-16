@@ -1,4 +1,24 @@
-const axios = require('axios');
+// Temporal fix for production deployment
+let axios;
+try {
+  axios = require('axios');
+} catch (error) {
+  console.log('⚠️ Axios not available, using fetch fallback');
+  // Fallback simple para producción sin axios
+  axios = {
+    post: async (url, data, config) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...config?.headers
+        },
+        body: JSON.stringify(data)
+      });
+      return { data: await response.json() };
+    }
+  };
+}
 
 /**
  * Servicio de IA para generación inteligente de mensajes de notificaciones
