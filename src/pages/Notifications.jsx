@@ -22,7 +22,9 @@ import {
   MoreVertical,
   ChevronLeft,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Plus,
+  MessageCircle
 } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
@@ -43,12 +45,15 @@ import {
 import { Checkbox } from '../components/ui/checkbox'
 import { Label } from '../components/ui/label'
 import { notificationsAPI } from '../lib/api'
+import { useAuth } from '../hooks/useAuth'
+import NotificationManager from '../components/NotificationManager'
 import toast from 'react-hot-toast'
 
 const Notifications = () => {
+  const { user } = useAuth()
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState('all')
+  const [activeTab, setActiveTab] = useState('notifications')
   const [selectedNotifications, setSelectedNotifications] = useState(new Set())
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState('all')
@@ -56,6 +61,7 @@ const Notifications = () => {
   const [sortBy, setSortBy] = useState('newest')
   const [currentPage, setCurrentPage] = useState(1)
   const [pagination, setPagination] = useState({})
+  const [viewMode, setViewMode] = useState('all')
 
   // Estados para configuración
   const [settings, setSettings] = useState({
@@ -67,8 +73,10 @@ const Notifications = () => {
   })
 
   useEffect(() => {
-    loadNotifications()
-  }, [activeTab, filterType, filterPriority, sortBy, currentPage, searchTerm])
+    if (activeTab === 'notifications') {
+      loadNotifications()
+    }
+  }, [activeTab, viewMode, filterType, filterPriority, sortBy, currentPage, searchTerm])
 
   const loadNotifications = async () => {
     try {
@@ -78,7 +86,7 @@ const Notifications = () => {
         page: currentPage
       }
 
-      if (activeTab === 'unread') {
+      if (viewMode === 'unread') {
         params.unread_only = true
       }
 
@@ -291,8 +299,8 @@ const Notifications = () => {
   }
 
   const filteredNotifications = notifications.filter(notification => {
-    if (activeTab === 'unread' && notification.is_read) return false
-    if (activeTab === 'read' && !notification.is_read) return false
+    if (viewMode === 'unread' && notification.is_read) return false
+    if (viewMode === 'read' && !notification.is_read) return false
     return true
   })
 
@@ -367,7 +375,22 @@ const Notifications = () => {
         </div>
       </div>
 
-      {/* Estadísticas rápidas */}
+      {/* Tabs principales */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsTrigger value="notifications" className="flex items-center gap-2">
+            <Bell className="h-4 w-4" />
+            Mis Notificaciones
+          </TabsTrigger>
+          <TabsTrigger value="manage" className="flex items-center gap-2">
+            <MessageCircle className="h-4 w-4" />
+            Gestión
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Tab: Mis Notificaciones */}
+        <TabsContent value="notifications" className="space-y-6">
+          {/* Estadísticas rápidas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <Card>
           <CardContent className="p-4">
@@ -479,30 +502,30 @@ const Notifications = () => {
         </CardContent>
       </Card>
 
-      {/* Tabs y acciones masivas */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList>
-              <TabsTrigger value="all">
-                Todas
-                <Badge variant="secondary" className="ml-2">
-                  {notifications.length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger value="unread">
-                Sin leer
-                {unreadCount > 0 && (
-                  <Badge variant="destructive" className="ml-2">
-                    {unreadCount}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="read">
-                Leídas
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {/* Sub-tabs y acciones masivas */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between">
+              <Tabs value={viewMode} onValueChange={setViewMode}>
+                <TabsList>
+                  <TabsTrigger value="all">
+                    Todas
+                    <Badge variant="secondary" className="ml-2">
+                      {notifications.length}
+                    </Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="unread">
+                    Sin leer
+                    {unreadCount > 0 && (
+                      <Badge variant="destructive" className="ml-2">
+                        {unreadCount}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="read">
+                    Leídas
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
 
           {/* Acciones masivas */}
           {selectedNotifications.size > 0 && (
@@ -708,6 +731,13 @@ const Notifications = () => {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        {/* Tab: Gestión de Notificaciones */}
+        <TabsContent value="manage">
+          <NotificationManager />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

@@ -142,10 +142,18 @@ export const settingsAPI = {
 // Notificaciones
 export const notificationsAPI = {
   getAll: (params) => api.get('/notifications', { params }),
+  create: (data) => api.post('/notifications', data),
   markAsRead: (id) => api.put(`/notifications/${id}/read`),
   markAllAsRead: () => api.put('/notifications/read-all'),
   getUnreadCount: () => api.get('/notifications/unread-count'),
   delete: (id) => api.delete(`/notifications/${id}`),
+  getStats: () => api.get('/notifications/stats'),
+  
+  // Funciones de aprobación (solo admins)
+  getPendingApproval: () => api.get('/notifications/pending-approval'),
+  approve: (id) => api.put(`/notifications/${id}/approve`),
+  reject: (id, reason) => api.put(`/notifications/${id}/reject`, { reason }),
+  getAdminStats: () => api.get('/notifications/admin/stats'),
 }
 
 // Gestión de Documentos Requeridos
