@@ -160,7 +160,8 @@ const corsOptions = {
       'http://localhost:5173',
       'http://localhost:3000',
       'https://gestor-documental-mineduc.vercel.app',
-      'https://gestor-documental-mineduc-20wdhsthk.vercel.app', // URL actual de Vercel
+      'https://gestor-documental-mineduc-20wdhsthk.vercel.app',
+      'https://gestor-documental-mineduc-hkn00xj87.vercel.app', // Nueva URL de Vercel
       process.env.FRONTEND_URL
     ].filter(Boolean);
     
@@ -172,14 +173,17 @@ const corsOptions = {
     }
     
     // También permitir cualquier subdominio de vercel.app en producción
-    if (origin && origin.includes('.vercel.app')) {
+    if (origin && /^https:\/\/.*\.vercel\.app$/.test(origin)) {
+      console.log('CORS: Permitiendo dominio Vercel:', origin);
       return callback(null, true);
     }
     
     if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log('CORS: Permitiendo dominio específico:', origin);
       callback(null, true);
     } else {
-      console.log('CORS blocked origin:', origin);
+      console.log('CORS: Rechazando dominio:', origin);
+      console.log('CORS: Dominios permitidos:', allowedOrigins);
       callback(new Error('No permitido por política CORS'));
     }
   },
