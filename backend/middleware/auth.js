@@ -5,9 +5,16 @@ const { supabase } = require('../config/supabase');
 const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
+    console.log('🔐 Auth attempt:', { 
+      method: req.method, 
+      path: req.path, 
+      hasAuthHeader: !!authHeader,
+      authHeaderPreview: authHeader ? authHeader.substring(0, 20) + '...' : 'none'
+    });
     
     // Verificar que el header de autorización esté presente
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('❌ Missing or invalid auth header');
       return res.status(401).json({ 
         error: 'Token de acceso requerido',
         code: 'MISSING_TOKEN',

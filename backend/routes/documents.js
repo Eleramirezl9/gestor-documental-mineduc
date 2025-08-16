@@ -103,7 +103,7 @@ const router = express.Router();
  *         file:
  *           type: string
  *           format: binary
- *           description: Archivo a subir (PDF, DOC, DOCX, JPG, JPEG, PNG, GIF)
+ *           description: Archivo a subir (PDF, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG, GIF)
  */
 
 // Configuración de multer para subida de archivos
@@ -123,7 +123,7 @@ const upload = multer({
     fileSize: 50 * 1024 * 1024, // 50MB
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'gif'];
+    const allowedTypes = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'gif'];
     const fileExtension = path.extname(file.originalname).toLowerCase().substring(1);
     
     if (allowedTypes.includes(fileExtension)) {
@@ -519,15 +519,19 @@ router.get('/:id', verifyToken, async (req, res) => {
 router.post('/', verifyToken, requireRole(['admin', 'editor']), [
   body('title').trim().isLength({ min: 3, max: 255 }).withMessage('El título debe tener entre 3 y 255 caracteres'),
   body('description').optional().trim().isLength({ max: 1000 }),
-  body('categoryId').optional().isUUID(),
+  body('categoryId').optional(),
   body('tags').optional().isArray(),
   body('effectiveDate').optional().isISO8601(),
   body('expirationDate').optional().isISO8601(),
   body('isPublic').optional().isBoolean()
 ], async (req, res) => {
   try {
+    console.log('📄 POST /api/documents - Request body:', req.body);
+    console.log('📄 User info:', { userId: req.user?.id, role: req.user?.profile?.role });
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
@@ -582,6 +586,66 @@ router.post('/', verifyToken, requireRole(['admin', 'editor']), [
 
 /**
  * @swagger
+ * /api/documents/upload:
+ *   post:
+ *     summary: Crear documento con archivo
+ *     description: Crea un nuevo documento y sube el archivo en una sola operación con procesamiento OCR y clasificación IA
+ *     tags: [Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - file
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 description: Título del documento
+ *               description:
+ *                 type: string
+ *                 description: Descripción del documento
+ *               categoryId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: ID de la categoría
+ *               tags:
+ *                 type: string
+ *                 description: Etiquetas separadas por comas
+ *               isPublic:
+ *                 type: string
+ *                 enum: ['true', 'false']
+ *                 description: Si el documento es público
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Archivo a subir (PDF, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG, GIF - máximo 50MB)
+ *     responses:
+ *       201:
+ *         description: Documento creado y archivo subido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Documento creado exitosamente"
+ *                 document:
+ *                   $ref: '#/components/schemas/Document'
+ *       400:
+ *         description: Error de validación o tipo de archivo no permitido
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Permisos insuficientes
+ *       500:
+ *         description: Error interno del servidor
+ * 
  * /api/documents/{id}/upload:
  *   post:
  *     summary: Subir archivo para documento
@@ -607,7 +671,7 @@ router.post('/', verifyToken, requireRole(['admin', 'editor']), [
  *               file:
  *                 type: string
  *                 format: binary
- *                 description: Archivo a subir (PDF, DOC, DOCX, JPG, JPEG, PNG, GIF - máximo 50MB)
+ *                 description: Archivo a subir (PDF, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG, GIF - máximo 50MB)
  *     responses:
  *       200:
  *         description: Archivo subido exitosamente
@@ -632,6 +696,137 @@ router.post('/', verifyToken, requireRole(['admin', 'editor']), [
  *       500:
  *         description: Error interno del servidor
  */
+router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.single('file'), [
+  body('title').trim().isLength({ min: 3, max: 255 }).withMessage('El título debe tener entre 3 y 255 caracteres'),
+  body('description').optional().trim().isLength({ max: 1000 }),
+  body('categoryId').optional(),
+  body('tags').optional(),
+  body('isPublic').optional()
+], async (req, res) => {
+  try {
+    console.log('Request body:', req.body);
+    console.log('Request file:', req.file);
+    
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
+      if (req.file) await fs.unlink(req.file.path);
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se proporcionó ningún archivo' });
+    }
+
+    const { title, description, categoryId, isPublic } = req.body;
+    let tags = [];
+    
+    // Procesar tags si se proporcionaron
+    if (req.body.tags) {
+      tags = typeof req.body.tags === 'string' 
+        ? req.body.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
+        : Array.isArray(req.body.tags) ? req.body.tags : [];
+    }
+
+    // Subir archivo a Supabase Storage primero
+    const fileBuffer = await fs.readFile(req.file.path);
+    const fileId = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const fileName = `documents/${fileId}/${req.file.filename}`;
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(fileName, fileBuffer, {
+        contentType: req.file.mimetype,
+        upsert: true
+      });
+
+    if (uploadError) {
+      await fs.unlink(req.file.path);
+      return res.status(400).json({ error: 'Error subiendo archivo: ' + uploadError.message });
+    }
+
+    // Procesar archivo con OCR si es necesario
+    let extractedText = '';
+    try {
+      if (['pdf', 'jpg', 'jpeg', 'png'].includes(path.extname(req.file.originalname).toLowerCase().substring(1))) {
+        extractedText = await ocrService.extractText(req.file.path);
+      }
+    } catch (ocrError) {
+      console.error('Error en OCR:', ocrError);
+    }
+
+    // Clasificación automática con IA
+    let aiClassification = null;
+    try {
+      if (extractedText) {
+        aiClassification = await aiService.classifyDocument(extractedText, req.file.originalname);
+      }
+    } catch (aiError) {
+      console.error('Error en clasificación IA:', aiError);
+    }
+
+    // Crear documento en la base de datos
+    const { data, error } = await supabase
+      .from('documents')
+      .insert([{
+        title,
+        description: description || null,
+        file_name: req.file.originalname,
+        file_path: uploadData.path,
+        file_size: req.file.size,
+        file_type: path.extname(req.file.originalname).toLowerCase().substring(1),
+        mime_type: req.file.mimetype,
+        category_id: categoryId || null,
+        tags: tags,
+        status: 'pending',
+        is_public: isPublic === 'true',
+        extracted_text: extractedText,
+        ai_classification: aiClassification,
+        created_by: req.user.id
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      // Si falla la creación del documento, eliminar el archivo subido
+      await supabase.storage.from('documents').remove([uploadData.path]);
+      await fs.unlink(req.file.path);
+      return res.status(400).json({ error: error.message });
+    }
+
+    // Limpiar archivo temporal
+    await fs.unlink(req.file.path);
+
+    // Registrar en auditoría
+    await auditService.log({
+      user_id: req.user.id,
+      action: 'DOCUMENT_CREATED_WITH_FILE',
+      entity_type: 'document',
+      entity_id: data.id,
+      details: { 
+        title,
+        file_name: req.file.originalname,
+        file_size: req.file.size,
+        has_ocr: !!extractedText,
+        has_ai_classification: !!aiClassification
+      },
+      ip_address: req.ip
+    });
+
+    res.status(201).json({
+      message: 'Documento creado exitosamente',
+      document: data
+    });
+
+  } catch (error) {
+    console.error('Error creando documento con archivo:', error);
+    if (req.file) {
+      await fs.unlink(req.file.path).catch(console.error);
+    }
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 router.post('/:id/upload', verifyToken, requireRole(['admin', 'editor']), upload.single('file'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -823,7 +1018,7 @@ router.post('/:id/upload', verifyToken, requireRole(['admin', 'editor']), upload
 router.put('/:id', verifyToken, requireRole(['admin', 'editor']), [
   body('title').optional().trim().isLength({ min: 3, max: 255 }),
   body('description').optional().trim().isLength({ max: 1000 }),
-  body('categoryId').optional().isUUID(),
+  body('categoryId').optional(),
   body('tags').optional().isArray(),
   body('effectiveDate').optional().isISO8601(),
   body('expirationDate').optional().isISO8601(),

@@ -84,7 +84,11 @@ export const documentsAPI = {
   upload: (formData) => api.post('/documents/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
-  download: (id) => api.get(`/documents/${id}/download`, { responseType: 'blob' }),
+  uploadToDocument: (id, formData) => api.post(`/documents/${id}/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  download: (id) => api.get(`/documents/${id}/download`),
+  getDownloadUrl: (id) => api.get(`/documents/${id}/download`),
   getStats: () => api.get('/documents/stats/overview'),
 }
 
@@ -140,6 +144,15 @@ export const settingsAPI = {
   update: (settings) => api.put('/settings', settings),
   reset: () => api.post('/settings/reset'),
   getSystemStatus: () => api.get('/settings/system-status'),
+}
+
+// Notificaciones
+export const notificationsAPI = {
+  getAll: (params) => api.get('/notifications', { params }),
+  markAsRead: (id) => api.put(`/notifications/${id}/read`),
+  markAllAsRead: () => api.put('/notifications/read-all'),
+  getUnreadCount: () => api.get('/notifications/unread-count'),
+  delete: (id) => api.delete(`/notifications/${id}`),
 }
 
 export default api

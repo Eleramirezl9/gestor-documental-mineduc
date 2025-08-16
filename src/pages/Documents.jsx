@@ -12,7 +12,8 @@ import {
   MoreHorizontal,
   Calendar,
   User,
-  Tag
+  Tag,
+  ExternalLink
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
@@ -34,7 +35,20 @@ import {
   TableHeader,
   TableRow,
 } from '../components/ui/table'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../components/ui/alert-dialog'
 import { documentsAPI } from '../lib/api'
+import DocumentUploadModal from '../components/DocumentUploadModal'
+import SimpleUploadModal from '../components/SimpleUploadModal'
+import DocumentGenerator from '../components/DocumentGenerator'
 import toast from 'react-hot-toast'
 
 const Documents = () => {
@@ -42,6 +56,14 @@ const Documents = () => {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filteredDocuments, setFilteredDocuments] = useState([])
+  
+  // Estados para modales
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showSimpleUploadModal, setShowSimpleUploadModal] = useState(false)
+  const [showDocumentGenerator, setShowDocumentGenerator] = useState(false)
+  
+  // Estados para confirmación de eliminación
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, documentId: null, documentTitle: '' })
 
   useEffect(() => {
     loadDocuments()
@@ -92,24 +114,120 @@ const Documents = () => {
     })
   }
 
-  const handleView = (documentId) => {
-    toast(`Ver documento ${documentId}`, { icon: '👁️' })
-    // Aquí implementarías la lógica para ver el documento
+  const handleView = async (documentId) => {
+    try {
+      const response = await documentsAPI.getById(documentId)
+      const document = response.data.document
+      
+      // Crear una nueva ventana/pestaña con información del documento
+      const content = `
+        <html>
+          <head>
+            <title>${document.title}</title>
+            <meta charset="utf-8">
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+              .header { border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px; }
+              .title { font-size: 24px; font-weight: bold; color: #333; margin-bottom: 5px; }
+              .meta { color: #666; font-size: 14px; }
+              .content { line-height: 1.6; }
+              .badge { display: inline-block; background: #f0f0f0; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 5px; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div class="title">${document.title}</div>
+              <div class="meta">
+                Archivo: ${document.file_name || 'Sin archivo'} | 
+                Fecha: ${formatDate(document.created_at)} | 
+                Estado: ${document.status}
+              </div>
+            </div>
+            <div class="content">
+              ${document.description ? `<p><strong>Descripción:</strong> ${document.description}</p>` : ''}
+              ${document.tags && document.tags.length > 0 ? `
+                <p><strong>Etiquetas:</strong> ${document.tags.map(tag => `<span class="badge">${tag}</span>`).join('')}</p>
+              ` : ''}
+              ${document.extracted_text ? `
+                <h3>Texto extraído (OCR):</h3>
+                <div style="background: #f9f9f9; padding: 15px; border-radius: 4px; white-space: pre-wrap;">${document.extracted_text}</div>
+              ` : ''}
+            </div>
+          </body>
+        </html>
+      `
+      
+      const newWindow = window.open('', '_blank')
+      newWindow.document.write(content)
+      newWindow.document.close()
+      
+    } catch (error) {
+      console.error('Error obteniendo documento:', error)
+      toast.error('Error al cargar el documento')
+    }
   }
 
   const handleEdit = (documentId) => {
-    toast(`Editar documento ${documentId}`, { icon: '✏️' })
-    // Aquí implementarías la lógica para editar el documento
+    toast(`Funcionalidad de edición próximamente`, { icon: '✏️' })
+    // TODO: Implementar modal de edición
   }
 
-  const handleDelete = (documentId) => {
-    toast(`Eliminar documento ${documentId}`, { icon: '🗑️' })
-    // Aquí implementarías la lógica para eliminar el documento
+  const handleDelete = (document) => {
+    setDeleteDialog({
+      open: true,
+      documentId: document.id,
+      documentTitle: document.title
+    })
   }
 
-  const handleDownload = (documentId) => {
-    toast(`Descargar documento ${documentId}`, { icon: '⬇️' })
-    // Aquí implementarías la lógica para descargar el documento
+  const confirmDelete = async () => {
+    try {
+      await documentsAPI.delete(deleteDialog.documentId)
+      toast.success('Documento eliminado exitosamente')
+      loadDocuments() // Recargar lista
+    } catch (error) {
+      console.error('Error eliminando documento:', error)
+      toast.error('Error al eliminar el documento')
+    } finally {
+      setDeleteDialog({ open: false, documentId: null, documentTitle: '' })
+    }
+  }
+
+  const handleDownload = async (documentId) => {
+    try {
+      const loadingToast = toast.loading('Preparando descarga...')
+      
+      const response = await documentsAPI.getDownloadUrl(documentId)
+      const { downloadUrl, fileName } = response.data
+      
+      // Crear un enlace temporal para descargar
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = fileName
+      link.target = '_blank'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      toast.dismiss(loadingToast)
+      toast.success('Descarga iniciada')
+      
+    } catch (error) {
+      console.error('Error descargando documento:', error)
+      toast.error('Error al descargar el documento')
+    }
+  }
+
+  const handleDocumentCreated = (newDocument) => {
+    setDocuments(prev => [newDocument, ...prev])
+    setShowUploadModal(false)
+    setShowSimpleUploadModal(false)
+  }
+
+  const handleDocumentGenerated = (generatedDoc) => {
+    toast.success(`${generatedDoc.type === 'pdf' ? 'PDF' : 'Excel'} generado: ${generatedDoc.fileName}`)
+    setShowDocumentGenerator(false)
+    // Opcionalmente podrías agregar el documento generado a la lista
   }
 
   if (loading) {
@@ -138,12 +256,16 @@ const Documents = () => {
             Gestiona todos los documentos del sistema
           </p>
         </div>
-        <div className="mt-4 sm:mt-0 flex space-x-3">
-          <Button>
+        <div className="mt-4 sm:mt-0 flex flex-wrap gap-3">
+          <Button onClick={() => setShowDocumentGenerator(true)}>
             <Plus className="h-4 w-4 mr-2" />
+            Crear Documento
+          </Button>
+          <Button variant="outline" onClick={() => setShowUploadModal(true)}>
+            <FileText className="h-4 w-4 mr-2" />
             Nuevo Documento
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => setShowSimpleUploadModal(true)}>
             <Upload className="h-4 w-4 mr-2" />
             Subir Archivo
           </Button>
@@ -294,8 +416,9 @@ const Documents = () => {
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
+                          <Button variant="ghost" className="h-8 w-8 p-0" title="Acciones">
                             <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Abrir menú</span>
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -314,7 +437,7 @@ const Documents = () => {
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
-                            onClick={() => handleDelete(document.id)}
+                            onClick={() => handleDelete(document)}
                             className="text-red-600"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -330,6 +453,44 @@ const Documents = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Modales */}
+      <DocumentUploadModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onDocumentCreated={handleDocumentCreated}
+      />
+
+      <SimpleUploadModal
+        isOpen={showSimpleUploadModal}
+        onClose={() => setShowSimpleUploadModal(false)}
+        onDocumentCreated={handleDocumentCreated}
+      />
+
+      <DocumentGenerator
+        isOpen={showDocumentGenerator}
+        onClose={() => setShowDocumentGenerator(false)}
+        onDocumentGenerated={handleDocumentGenerated}
+      />
+
+      {/* Diálogo de confirmación para eliminar */}
+      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => !open && setDeleteDialog({ open: false, documentId: null, documentTitle: '' })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminará permanentemente el documento
+              <strong> "{deleteDialog.documentTitle}"</strong> y su archivo asociado.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

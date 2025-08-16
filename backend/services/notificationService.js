@@ -1,450 +1,366 @@
-const nodemailer = require('nodemailer');
 const { supabase } = require('../config/supabase');
 
+/**
+ * Servicio de notificaciones para crear y enviar notificaciones a usuarios
+ */
 class NotificationService {
-  constructor() {
-    this.transporter = null;
-    this.initializeTransporter();
-  }
-
   /**
-   * Inicializa el transportador de email
-   */
-  initializeTransporter() {
-    try {
-      if (process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-        this.transporter = nodemailer.createTransport({
-          host: process.env.EMAIL_HOST,
-          port: parseInt(process.env.EMAIL_PORT) || 587,
-          secure: false,
-          auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error inicializando transportador de email:', error);
-    }
-  }
-
-  /**
-   * Crea una notificación en la base de datos
+   * Crea una nueva notificación
    * @param {Object} notificationData - Datos de la notificación
+   * @param {string} notificationData.user_id - ID del usuario destinatario
+   * @param {string} notificationData.title - Título de la notificación
+   * @param {string} notificationData.message - Mensaje de la notificación
+   * @param {string} notificationData.type - Tipo de notificación (info, success, warning, error, document, user, system)
+   * @param {string} notificationData.priority - Prioridad (low, medium, high, urgent)
+   * @param {Object} notificationData.data - Datos adicionales
+   * @returns {Promise<Object>} La notificación creada
    */
-  async createNotification(notificationData) {
+  async createNotification({
+    user_id,
+    title,
+    message,
+    type = 'info',
+    priority = 'medium',
+    data = {}
+  }) {
     try {
-      const { data, error } = await supabase
+      const { data: notification, error } = await supabase
         .from('notifications')
-        .insert([{
-          user_id: notificationData.userId,
-          title: notificationData.title,
-          message: notificationData.message,
-          type: notificationData.type || 'info',
-          related_entity_type: notificationData.entityType || null,
-          related_entity_id: notificationData.entityId || null,
-          action_url: notificationData.actionUrl || null
-        }])
+        .insert({
+          user_id,
+          title,
+          message,
+          type,
+          priority,
+          data,
+          is_read: false,
+          created_at: new Date().toISOString()
+        })
         .select()
         .single();
 
       if (error) {
-        console.error('Error creando notificación:', error);
-        return null;
+        throw new Error(`Error creando notificación: ${error.message}`);
       }
 
-      return data;
+      console.log(`📢 Notificación creada: ${title} para usuario ${user_id}`);
+      return notification;
     } catch (error) {
       console.error('Error en createNotification:', error);
-      return null;
+      throw error;
     }
   }
 
   /**
-   * Envía notificación por email
-   * @param {string} to - Email destinatario
-   * @param {string} subject - Asunto del email
-   * @param {string} html - Contenido HTML del email
-   */
-  async sendEmail(to, subject, html) {
-    try {
-      if (!this.transporter) {
-        console.log('Transportador de email no configurado');
-        return false;
-      }
-
-      const mailOptions = {
-        from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-        to,
-        subject,
-        html
-      };
-
-      const result = await this.transporter.sendMail(mailOptions);
-      console.log('Email enviado:', result.messageId);
-      return true;
-
-    } catch (error) {
-      console.error('Error enviando email:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Envía notificación de workflow
-   * @param {string} workflowId - ID del workflow
-   * @param {string} userId - ID del usuario a notificar
-   * @param {string} type - Tipo de notificación
-   */
-  async sendWorkflowNotification(workflowId, userId, type) {
-    try {
-      // Obtener información del workflow y usuario
-      const { data: workflow, error: workflowError } = await supabase
-        .from('workflows_full')
-        .select('*')
-        .eq('id', workflowId)
-        .single();
-
-      if (workflowError || !workflow) {
-        console.error('Error obteniendo workflow para notificación:', workflowError);
-        return;
-      }
-
-      const { data: user, error: userError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (userError || !user) {
-        console.error('Error obteniendo usuario para notificación:', userError);
-        return;
-      }
-
-      let title, message, actionUrl;
-
-      switch (type) {
-        case 'workflow_assigned':
-          title = 'Nuevo documento para revisar';
-          message = `Se te ha asignado la revisión del documento "${workflow.document_title}". Prioridad: ${workflow.priority}`;
-          actionUrl = `/workflows/${workflowId}`;
-          break;
-
-        case 'workflow_approved':
-          title = 'Documento aprobado';
-          message = `Tu documento "${workflow.document_title}" ha sido aprobado exitosamente.`;
-          actionUrl = `/documents/${workflow.document_id}`;
-          break;
-
-        case 'workflow_rejected':
-          title = 'Documento rechazado';
-          message = `Tu documento "${workflow.document_title}" ha sido rechazado. Revisa los comentarios para más detalles.`;
-          actionUrl = `/workflows/${workflowId}`;
-          break;
-
-        case 'workflow_cancelled':
-          title = 'Workflow cancelado';
-          message = `El workflow para el documento "${workflow.document_title}" ha sido cancelado.`;
-          actionUrl = `/workflows/${workflowId}`;
-          break;
-
-        default:
-          title = 'Notificación de workflow';
-          message = `Hay una actualización en el workflow del documento "${workflow.document_title}".`;
-          actionUrl = `/workflows/${workflowId}`;
-      }
-
-      // Crear notificación en la base de datos
-      await this.createNotification({
-        userId,
-        title,
-        message,
-        type: type.includes('rejected') ? 'error' : type.includes('approved') ? 'success' : 'info',
-        entityType: 'workflow',
-        entityId: workflowId,
-        actionUrl
-      });
-
-      // Enviar email si está configurado
-      if (this.transporter && user.email) {
-        const emailHtml = this.generateWorkflowEmailTemplate(user, workflow, type, title, message, actionUrl);
-        await this.sendEmail(user.email, title, emailHtml);
-      }
-
-    } catch (error) {
-      console.error('Error enviando notificación de workflow:', error);
-    }
-  }
-
-  /**
-   * Envía notificación de documento
-   * @param {string} documentId - ID del documento
-   * @param {string} userId - ID del usuario a notificar
-   * @param {string} type - Tipo de notificación
-   */
-  async sendDocumentNotification(documentId, userId, type) {
-    try {
-      // Obtener información del documento y usuario
-      const { data: document, error: docError } = await supabase
-        .from('documents_full')
-        .select('*')
-        .eq('id', documentId)
-        .single();
-
-      if (docError || !document) {
-        console.error('Error obteniendo documento para notificación:', docError);
-        return;
-      }
-
-      const { data: user, error: userError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (userError || !user) {
-        console.error('Error obteniendo usuario para notificación:', userError);
-        return;
-      }
-
-      let title, message, actionUrl;
-
-      switch (type) {
-        case 'document_created':
-          title = 'Nuevo documento creado';
-          message = `Se ha creado un nuevo documento: "${document.title}"`;
-          actionUrl = `/documents/${documentId}`;
-          break;
-
-        case 'document_updated':
-          title = 'Documento actualizado';
-          message = `El documento "${document.title}" ha sido actualizado.`;
-          actionUrl = `/documents/${documentId}`;
-          break;
-
-        case 'document_published':
-          title = 'Documento publicado';
-          message = `El documento "${document.title}" ha sido publicado y está disponible.`;
-          actionUrl = `/documents/${documentId}`;
-          break;
-
-        default:
-          title = 'Notificación de documento';
-          message = `Hay una actualización en el documento "${document.title}".`;
-          actionUrl = `/documents/${documentId}`;
-      }
-
-      // Crear notificación en la base de datos
-      await this.createNotification({
-        userId,
-        title,
-        message,
-        type: 'info',
-        entityType: 'document',
-        entityId: documentId,
-        actionUrl
-      });
-
-      // Enviar email si está configurado
-      if (this.transporter && user.email) {
-        const emailHtml = this.generateDocumentEmailTemplate(user, document, type, title, message, actionUrl);
-        await this.sendEmail(user.email, title, emailHtml);
-      }
-
-    } catch (error) {
-      console.error('Error enviando notificación de documento:', error);
-    }
-  }
-
-  /**
-   * Genera template de email para notificaciones de workflow
-   */
-  generateWorkflowEmailTemplate(user, workflow, type, title, message, actionUrl) {
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const fullActionUrl = `${baseUrl}${actionUrl}`;
-
-    return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${title}</title>
-        <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #1e40af; color: white; padding: 20px; text-align: center; }
-            .content { padding: 20px; background: #f9f9f9; }
-            .button { display: inline-block; padding: 12px 24px; background: #1e40af; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>MINEDUC - Sistema de Gestión Documental</h1>
-            </div>
-            <div class="content">
-                <h2>Hola ${user.first_name} ${user.last_name},</h2>
-                <p>${message}</p>
-                
-                <h3>Detalles del Workflow:</h3>
-                <ul>
-                    <li><strong>Documento:</strong> ${workflow.document_title}</li>
-                    <li><strong>Tipo:</strong> ${workflow.workflow_type}</li>
-                    <li><strong>Prioridad:</strong> ${workflow.priority}</li>
-                    <li><strong>Estado:</strong> ${workflow.status}</li>
-                    ${workflow.due_date ? `<li><strong>Fecha límite:</strong> ${new Date(workflow.due_date).toLocaleDateString()}</li>` : ''}
-                </ul>
-                
-                <a href="${fullActionUrl}" class="button">Ver Workflow</a>
-                
-                <p>Si tienes alguna pregunta, no dudes en contactar al administrador del sistema.</p>
-            </div>
-            <div class="footer">
-                <p>© 2024 Ministerio de Educación de Guatemala</p>
-                <p>Este es un mensaje automático, por favor no responder a este correo.</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    `;
-  }
-
-  /**
-   * Genera template de email para notificaciones de documento
-   */
-  generateDocumentEmailTemplate(user, document, type, title, message, actionUrl) {
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const fullActionUrl = `${baseUrl}${actionUrl}`;
-
-    return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${title}</title>
-        <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #1e40af; color: white; padding: 20px; text-align: center; }
-            .content { padding: 20px; background: #f9f9f9; }
-            .button { display: inline-block; padding: 12px 24px; background: #1e40af; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>MINEDUC - Sistema de Gestión Documental</h1>
-            </div>
-            <div class="content">
-                <h2>Hola ${user.first_name} ${user.last_name},</h2>
-                <p>${message}</p>
-                
-                <h3>Detalles del Documento:</h3>
-                <ul>
-                    <li><strong>Título:</strong> ${document.title}</li>
-                    <li><strong>Categoría:</strong> ${document.category_name || 'Sin categoría'}</li>
-                    <li><strong>Estado:</strong> ${document.status}</li>
-                    <li><strong>Creado por:</strong> ${document.created_by_name}</li>
-                    <li><strong>Fecha de creación:</strong> ${new Date(document.created_at).toLocaleDateString()}</li>
-                </ul>
-                
-                <a href="${fullActionUrl}" class="button">Ver Documento</a>
-                
-                <p>Si tienes alguna pregunta, no dudes en contactar al administrador del sistema.</p>
-            </div>
-            <div class="footer">
-                <p>© 2024 Ministerio de Educación de Guatemala</p>
-                <p>Este es un mensaje automático, por favor no responder a este correo.</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    `;
-  }
-
-  /**
-   * Marca notificaciones como leídas
-   * @param {string} userId - ID del usuario
-   * @param {Array<string>} notificationIds - IDs de las notificaciones
-   */
-  async markAsRead(userId, notificationIds) {
-    try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('user_id', userId)
-        .in('id', notificationIds);
-
-      if (error) {
-        console.error('Error marcando notificaciones como leídas:', error);
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error en markAsRead:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Obtiene el conteo de notificaciones no leídas
-   * @param {string} userId - ID del usuario
-   */
-  async getUnreadCount(userId) {
-    try {
-      const { count, error } = await supabase
-        .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .eq('is_read', false);
-
-      if (error) {
-        console.error('Error obteniendo conteo de notificaciones:', error);
-        return 0;
-      }
-
-      return count || 0;
-    } catch (error) {
-      console.error('Error en getUnreadCount:', error);
-      return 0;
-    }
-  }
-
-  /**
-   * Envía notificaciones masivas
-   * @param {Array<string>} userIds - IDs de usuarios
+   * Crea notificaciones para múltiples usuarios
+   * @param {Array<string>} user_ids - Array de IDs de usuarios
    * @param {Object} notificationData - Datos de la notificación
+   * @returns {Promise<Array>} Array de notificaciones creadas
    */
-  async sendBulkNotification(userIds, notificationData) {
+  async createBulkNotifications(user_ids, notificationData) {
     try {
-      const notifications = userIds.map(userId => ({
-        user_id: userId,
+      const notifications = user_ids.map(user_id => ({
+        user_id,
         title: notificationData.title,
         message: notificationData.message,
         type: notificationData.type || 'info',
-        related_entity_type: notificationData.entityType || null,
-        related_entity_id: notificationData.entityId || null,
-        action_url: notificationData.actionUrl || null
+        priority: notificationData.priority || 'medium',
+        data: notificationData.data || {},
+        is_read: false,
+        created_at: new Date().toISOString()
       }));
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('notifications')
-        .insert(notifications);
+        .insert(notifications)
+        .select();
 
       if (error) {
-        console.error('Error enviando notificaciones masivas:', error);
-        return false;
+        throw new Error(`Error creando notificaciones en lote: ${error.message}`);
       }
 
-      return true;
+      console.log(`📢 ${data.length} notificaciones creadas en lote`);
+      return data;
     } catch (error) {
-      console.error('Error en sendBulkNotification:', error);
-      return false;
+      console.error('Error en createBulkNotifications:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Envía notificación cuando se crea un nuevo documento
+   */
+  async notifyDocumentCreated(document, creator_id) {
+    try {
+      // Obtener usuarios que deben ser notificados (admins y editores)
+      const { data: users } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .in('role', ['admin', 'editor'])
+        .eq('is_active', true)
+        .neq('id', creator_id); // Excluir al creador
+
+      if (users && users.length > 0) {
+        const user_ids = users.map(user => user.id);
+        
+        await this.createBulkNotifications(user_ids, {
+          title: 'Nuevo documento creado',
+          message: `Se ha creado un nuevo documento: "${document.title}"`,
+          type: 'document',
+          priority: 'medium',
+          data: {
+            document_id: document.id,
+            document_title: document.title,
+            created_by: creator_id,
+            action: 'document_created'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error notificando creación de documento:', error);
+    }
+  }
+
+  /**
+   * Envía notificación cuando se aprueba un documento
+   */
+  async notifyDocumentApproved(document, approver_id) {
+    try {
+      // Notificar al creador del documento
+      await this.createNotification({
+        user_id: document.created_by,
+        title: 'Documento aprobado',
+        message: `Tu documento "${document.title}" ha sido aprobado`,
+        type: 'success',
+        priority: 'medium',
+        data: {
+          document_id: document.id,
+          document_title: document.title,
+          approved_by: approver_id,
+          action: 'document_approved'
+        }
+      });
+    } catch (error) {
+      console.error('Error notificando aprobación de documento:', error);
+    }
+  }
+
+  /**
+   * Envía notificación cuando se rechaza un documento
+   */
+  async notifyDocumentRejected(document, rejector_id, reason) {
+    try {
+      // Notificar al creador del documento
+      await this.createNotification({
+        user_id: document.created_by,
+        title: 'Documento rechazado',
+        message: `Tu documento "${document.title}" ha sido rechazado. Motivo: ${reason}`,
+        type: 'warning',
+        priority: 'high',
+        data: {
+          document_id: document.id,
+          document_title: document.title,
+          rejected_by: rejector_id,
+          rejection_reason: reason,
+          action: 'document_rejected'
+        }
+      });
+    } catch (error) {
+      console.error('Error notificando rechazo de documento:', error);
+    }
+  }
+
+  /**
+   * Envía notificación cuando se crea un nuevo usuario
+   */
+  async notifyUserCreated(newUser, creator_id) {
+    try {
+      // Notificar a todos los admins excepto al creador
+      const { data: admins } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('role', 'admin')
+        .eq('is_active', true)
+        .neq('id', creator_id);
+
+      if (admins && admins.length > 0) {
+        const admin_ids = admins.map(admin => admin.id);
+        
+        await this.createBulkNotifications(admin_ids, {
+          title: 'Nuevo usuario registrado',
+          message: `Se ha registrado un nuevo usuario: ${newUser.name} (${newUser.email})`,
+          type: 'user',
+          priority: 'medium',
+          data: {
+            user_id: newUser.id,
+            user_name: newUser.name,
+            user_email: newUser.email,
+            user_role: newUser.role,
+            created_by: creator_id,
+            action: 'user_created'
+          }
+        });
+      }
+
+      // Notificar al nuevo usuario
+      await this.createNotification({
+        user_id: newUser.id,
+        title: '¡Bienvenido al sistema!',
+        message: `Hola ${newUser.name}, tu cuenta ha sido creada exitosamente. Ahora puedes acceder al sistema de gestión documental.`,
+        type: 'success',
+        priority: 'high',
+        data: {
+          action: 'welcome_user'
+        }
+      });
+    } catch (error) {
+      console.error('Error notificando creación de usuario:', error);
+    }
+  }
+
+  /**
+   * Envía notificación cuando se actualiza el estado de un usuario
+   */
+  async notifyUserStatusChanged(user, new_status, changer_id) {
+    try {
+      const status_text = new_status ? 'activado' : 'desactivado';
+      
+      // Notificar al usuario afectado (solo si fue activado)
+      if (new_status) {
+        await this.createNotification({
+          user_id: user.id,
+          title: 'Cuenta activada',
+          message: 'Tu cuenta ha sido activada. Ya puedes acceder al sistema.',
+          type: 'success',
+          priority: 'medium',
+          data: {
+            action: 'user_activated'
+          }
+        });
+      }
+
+      // Notificar a los admins
+      const { data: admins } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('role', 'admin')
+        .eq('is_active', true)
+        .neq('id', changer_id)
+        .neq('id', user.id);
+
+      if (admins && admins.length > 0) {
+        const admin_ids = admins.map(admin => admin.id);
+        
+        await this.createBulkNotifications(admin_ids, {
+          title: `Usuario ${status_text}`,
+          message: `El usuario ${user.name} (${user.email}) ha sido ${status_text}`,
+          type: 'user',
+          priority: 'low',
+          data: {
+            user_id: user.id,
+            user_name: user.name,
+            user_email: user.email,
+            new_status,
+            changed_by: changer_id,
+            action: 'user_status_changed'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error notificando cambio de estado de usuario:', error);
+    }
+  }
+
+  /**
+   * Envía notificación de error del sistema
+   */
+  async notifySystemError(error_message, details = {}) {
+    try {
+      // Notificar a todos los admins
+      const { data: admins } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('role', 'admin')
+        .eq('is_active', true);
+
+      if (admins && admins.length > 0) {
+        const admin_ids = admins.map(admin => admin.id);
+        
+        await this.createBulkNotifications(admin_ids, {
+          title: 'Error del sistema',
+          message: `Se ha detectado un error en el sistema: ${error_message}`,
+          type: 'error',
+          priority: 'urgent',
+          data: {
+            error_message,
+            error_details: details,
+            timestamp: new Date().toISOString(),
+            action: 'system_error'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error notificando error del sistema:', error);
+    }
+  }
+
+  /**
+   * Envía notificación de mantenimiento programado
+   */
+  async notifyScheduledMaintenance(maintenance_info) {
+    try {
+      // Obtener todos los usuarios activos
+      const { data: users } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('is_active', true);
+
+      if (users && users.length > 0) {
+        const user_ids = users.map(user => user.id);
+        
+        await this.createBulkNotifications(user_ids, {
+          title: 'Mantenimiento programado',
+          message: `Se realizará mantenimiento del sistema el ${maintenance_info.date} de ${maintenance_info.start_time} a ${maintenance_info.end_time}`,
+          type: 'warning',
+          priority: 'high',
+          data: {
+            maintenance_date: maintenance_info.date,
+            start_time: maintenance_info.start_time,
+            end_time: maintenance_info.end_time,
+            description: maintenance_info.description,
+            action: 'scheduled_maintenance'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error notificando mantenimiento programado:', error);
+    }
+  }
+
+  /**
+   * Limpia notificaciones antiguas
+   */
+  async cleanupOldNotifications(days_old = 30) {
+    try {
+      const cutoff_date = new Date();
+      cutoff_date.setDate(cutoff_date.getDate() - days_old);
+
+      const { data, error } = await supabase
+        .from('notifications')
+        .delete()
+        .lt('created_at', cutoff_date.toISOString())
+        .eq('is_read', true)
+        .select();
+
+      if (error) {
+        throw new Error(`Error limpiando notificaciones: ${error.message}`);
+      }
+
+      console.log(`🧹 Se eliminaron ${data?.length || 0} notificaciones antiguas`);
+      return data?.length || 0;
+    } catch (error) {
+      console.error('Error en cleanupOldNotifications:', error);
+      throw error;
     }
   }
 }

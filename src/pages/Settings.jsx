@@ -123,6 +123,24 @@ const Settings = () => {
     }))
   }
 
+  const handleSystemStatusCheck = async () => {
+    try {
+      toast.loading('Verificando estado del sistema...')
+      const response = await settingsAPI.getSystemStatus()
+      toast.dismiss()
+      
+      if (response.data.status === 'healthy') {
+        toast.success('Sistema funcionando correctamente')
+      } else {
+        toast.warning('Se detectaron algunos problemas en el sistema')
+      }
+    } catch (error) {
+      toast.dismiss()
+      console.error('Error verificando estado:', error)
+      toast.error('Error al verificar el estado del sistema')
+    }
+  }
+
   const SettingCard = ({ icon: Icon, title, description, children }) => (
     <Card>
       <CardHeader>
@@ -442,7 +460,7 @@ const Settings = () => {
               <span className="text-sm text-gray-500">Hace 5 minutos</span>
             </div>
             <div className="pt-2">
-              <Button variant="outline" className="w-full" size="sm">
+              <Button variant="outline" className="w-full" size="sm" onClick={handleSystemStatusCheck}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Verificar Estado
               </Button>

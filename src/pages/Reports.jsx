@@ -68,8 +68,39 @@ const Reports = () => {
     }
   }
 
-  const handleExportReport = (type) => {
-    toast(`Exportando reporte ${type}`, { icon: '📊' })
+  const handleExportReport = async (type) => {
+    try {
+      toast.loading(`Generando reporte ${type}...`)
+      
+      let response
+      const params = {
+        period: selectedPeriod,
+        format: type
+      }
+      
+      if (type === 'excel' || type === 'csv') {
+        response = await reportsAPI.exportDocuments(params)
+      } else if (type === 'pdf') {
+        response = await reportsAPI.exportAudit(params)
+      }
+      
+      // Crear y descargar el archivo
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `reporte-${selectedPeriod}-${new Date().toISOString().split('T')[0]}.${type}`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      toast.dismiss()
+      toast.success(`Reporte ${type} exportado exitosamente`)
+    } catch (error) {
+      toast.dismiss()
+      console.error('Error exportando reporte:', error)
+      toast.error(`Error al exportar el reporte ${type}`)
+    }
   }
 
   const handleRefreshData = () => {

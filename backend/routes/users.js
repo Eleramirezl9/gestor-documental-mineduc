@@ -3,6 +3,7 @@ const { body, validationResult, query } = require('express-validator');
 const { supabase, supabaseAdmin } = require('../config/supabase');
 const { verifyToken, requireRole } = require('../middleware/auth');
 const auditService = require('../services/auditService');
+const notificationService = require('../services/notificationService');
 
 const router = express.Router();
 
@@ -300,6 +301,184 @@ router.get('/stats/overview', verifyToken, requireRole(['admin']), async (req, r
 
 /**
  * @swagger
+ * /api/users:
+ *   post:
+ *     summary: Crear nuevo usuario
+ *     description: Crea un nuevo usuario en el sistema (solo admins)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - email
+ *               - password
+ *               - role
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 minLength: 2
+ *                 description: Nombre completo del usuario
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Correo electrónico del usuario
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ *                 description: Contraseña del usuario
+ *               role:
+ *                 type: string
+ *                 enum: [admin, editor, viewer]
+ *                 description: Rol del usuario
+ *               department:
+ *                 type: string
+ *                 description: Departamento del usuario
+ *               phone:
+ *                 type: string
+ *                 description: Teléfono del usuario
+ *     responses:
+ *       201:
+ *         description: Usuario creado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Usuario creado exitosamente"
+ *                 user:
+ *                   $ref: '#/components/schemas/UserProfile'
+ *       400:
+ *         description: Error de validación o email ya existe
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Permisos insuficientes (solo admin)
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.post('/', verifyToken, requireRole(['admin']), [
+  body('name').trim().isLength({ min: 2 }).withMessage('El nombre debe tener al menos 2 caracteres'),
+  body('email').isEmail().normalizeEmail().withMessage('Email inválido'),
+  body('password').isLength({ min: 8 }).withMessage('La contraseña debe tener al menos 8 caracteres'),
+  body('role').isIn(['admin', 'editor', 'viewer']).withMessage('Rol inválido'),
+  body('department').optional().trim(),
+  body('phone').optional().trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        message: 'Errores de validación',
+        errors: errors.array() 
+      });
+    }
+
+    const { name, email, password, role, department, phone } = req.body;
+
+    // Verificar si el email ya existe
+    const { data: existingUser } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('email', email)
+      .single();
+
+    if (existingUser) {
+      return res.status(400).json({ 
+        message: 'Ya existe un usuario con este email' 
+      });
+    }
+
+    // Crear usuario en Supabase Auth
+    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true
+    });
+
+    if (authError) {
+      console.error('Error creando usuario en Auth:', authError);
+      
+      // Manejo específico para email existente
+      if (authError.code === 'email_exists' || authError.message?.includes('already been registered')) {
+        return res.status(400).json({ 
+          message: 'Ya existe un usuario registrado con este email en el sistema de autenticación' 
+        });
+      }
+      
+      return res.status(400).json({ 
+        message: authError.message || 'Error al crear el usuario' 
+      });
+    }
+
+    // Crear perfil de usuario
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .insert({
+        id: authUser.user.id,
+        email,
+        name,
+        role,
+        department: department || null,
+        phone: phone || null,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (profileError) {
+      console.error('Error creando perfil:', profileError);
+      // Si falla el perfil, eliminar el usuario de Auth
+      await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+      return res.status(400).json({ 
+        message: 'Error al crear el perfil del usuario' 
+      });
+    }
+
+    // Registrar en auditoría
+    await auditService.log({
+      user_id: req.user.id,
+      action: 'USER_CREATED',
+      details: { 
+        new_user_id: profile.id,
+        new_user_email: email,
+        role,
+        department
+      },
+      ip_address: req.ip
+    });
+
+    // Enviar notificaciones
+    try {
+      await notificationService.notifyUserCreated(profile, req.user.id);
+    } catch (notifError) {
+      console.error('Error enviando notificaciones de usuario creado:', notifError);
+    }
+
+    res.status(201).json({
+      message: 'Usuario creado exitosamente',
+      user: profile
+    });
+
+  } catch (error) {
+    console.error('Error creando usuario:', error);
+    res.status(500).json({ 
+      message: 'Error interno del servidor' 
+    });
+  }
+});
+
+/**
+ * @swagger
  * /api/users/{id}:
  *   get:
  *     summary: Obtener usuario por ID
@@ -568,6 +747,112 @@ router.delete('/:id', verifyToken, requireRole(['admin']), async (req, res) => {
 
   } catch (error) {
     console.error('Error eliminando usuario:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/users/{id}/toggle-status:
+ *   put:
+ *     summary: Alternar estado de usuario
+ *     description: Activa o desactiva un usuario (solo admins)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del usuario
+ *     responses:
+ *       200:
+ *         description: Estado del usuario actualizado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 user:
+ *                   $ref: '#/components/schemas/UserProfile'
+ *       400:
+ *         description: Error (ej. intentar desactivar cuenta propia)
+ *       404:
+ *         description: Usuario no encontrado
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Permisos insuficientes (solo admin)
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.put('/:id/toggle-status', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // No permitir que un admin se desactive a sí mismo
+    if (id === req.user.id) {
+      return res.status(400).json({ error: 'No puedes desactivar tu propia cuenta' });
+    }
+
+    // Verificar que el usuario existe
+    const { data: existingUser, error: fetchError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existingUser) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    // Alternar estado
+    const newStatus = !existingUser.is_active;
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .update({ 
+        is_active: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    // Registrar en auditoría
+    await auditService.log({
+      user_id: req.user.id,
+      action: newStatus ? 'USER_ACTIVATED' : 'USER_DEACTIVATED',
+      details: { 
+        target_user_id: id,
+        target_user_email: existingUser.email,
+        new_status: newStatus
+      },
+      ip_address: req.ip
+    });
+
+    // Enviar notificaciones
+    try {
+      await notificationService.notifyUserStatusChanged(existingUser, newStatus, req.user.id);
+    } catch (notifError) {
+      console.error('Error enviando notificaciones de cambio de estado:', notifError);
+    }
+
+    res.json({
+      message: `Usuario ${newStatus ? 'activado' : 'desactivado'} exitosamente`,
+      user: data
+    });
+
+  } catch (error) {
+    console.error('Error alternando estado del usuario:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });

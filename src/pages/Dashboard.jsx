@@ -28,11 +28,13 @@ import {
   Line
 } from 'recharts'
 import { useAuth } from '../hooks/useAuth'
-import { documentsAPI, usersAPI, workflowsAPI } from '../lib/api'
+import { documentsAPI, usersAPI, workflowsAPI, reportsAPI } from '../lib/api'
 import toast from 'react-hot-toast'
+import { useNavigate } from 'react-router-dom'
 
 const Dashboard = () => {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [stats, setStats] = useState({
     documents: { total: 0, pending: 0, approved: 0, rejected: 0 },
     users: { total: 0, active: 0, inactive: 0 },
@@ -109,6 +111,37 @@ const Dashboard = () => {
     return 'Buenas noches'
   }
 
+  const handleNewDocument = () => {
+    navigate('/documents')
+  }
+
+  const handleExportReport = async () => {
+    try {
+      toast.loading('Generando reporte...')
+      const response = await reportsAPI.exportDocuments({
+        period: 'current_month',
+        format: 'pdf'
+      })
+      
+      // Crear y descargar el archivo
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `reporte-dashboard-${new Date().toISOString().split('T')[0]}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      toast.dismiss()
+      toast.success('Reporte exportado exitosamente')
+    } catch (error) {
+      toast.dismiss()
+      console.error('Error exportando reporte:', error)
+      toast.error('Error al exportar el reporte')
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-6">
@@ -137,11 +170,11 @@ const Dashboard = () => {
           </p>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
-          <Button>
+          <Button onClick={handleNewDocument}>
             <Plus className="h-4 w-4 mr-2" />
             Nuevo Documento
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleExportReport}>
             <Download className="h-4 w-4 mr-2" />
             Exportar Reporte
           </Button>

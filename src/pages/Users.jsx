@@ -37,12 +37,14 @@ import {
 } from '../components/ui/table'
 import { usersAPI } from '../lib/api'
 import toast from 'react-hot-toast'
+import NewUserModal from '../components/NewUserModal'
 
 const Users = () => {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filteredUsers, setFilteredUsers] = useState([])
+  const [showNewUserModal, setShowNewUserModal] = useState(false)
 
   useEffect(() => {
     loadUsers()
@@ -112,8 +114,31 @@ const Users = () => {
     toast(`Eliminar usuario ${userId}`, { icon: '🗑️' })
   }
 
-  const handleToggleStatus = (userId) => {
-    toast(`Cambiar estado del usuario ${userId}`, { icon: '🔄' })
+  const handleToggleStatus = async (userId) => {
+    try {
+      await usersAPI.toggleStatus(userId)
+      toast.success('Estado del usuario actualizado')
+      loadUsers()
+    } catch (error) {
+      console.error('Error cambiando estado:', error)
+      toast.error('Error al cambiar el estado del usuario')
+    }
+  }
+
+  const handleNewUser = () => {
+    setShowNewUserModal(true)
+  }
+
+  const handleUserCreated = () => {
+    loadUsers()
+  }
+
+  const handleInviteUser = () => {
+    toast('Funcionalidad de invitar usuario próximamente', { icon: '📧' })
+  }
+
+  const handleAdvancedFilters = () => {
+    toast('Filtros avanzados próximamente', { icon: '🔍' })
   }
 
   if (loading) {
@@ -143,11 +168,11 @@ const Users = () => {
           </p>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
-          <Button>
+          <Button onClick={handleNewUser}>
             <Plus className="h-4 w-4 mr-2" />
             Nuevo Usuario
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleInviteUser}>
             <UserPlus className="h-4 w-4 mr-2" />
             Invitar Usuario
           </Button>
@@ -176,7 +201,7 @@ const Users = () => {
                 />
               </div>
             </div>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleAdvancedFilters}>
               <Filter className="h-4 w-4 mr-2" />
               Filtros Avanzados
             </Button>
@@ -305,8 +330,9 @@ const Users = () => {
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
+                          <Button variant="ghost" className="h-8 w-8 p-0" title="Acciones">
                             <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Abrir menú</span>
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -350,6 +376,13 @@ const Users = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal de Nuevo Usuario */}
+      <NewUserModal
+        isOpen={showNewUserModal}
+        onClose={() => setShowNewUserModal(false)}
+        onUserCreated={handleUserCreated}
+      />
     </div>
   )
 }

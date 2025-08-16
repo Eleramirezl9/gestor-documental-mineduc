@@ -134,7 +134,7 @@ app.use(helmet());
 // Rate limiting - diferentes límites para diferentes rutas
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+  max: process.env.NODE_ENV === 'development' ? 1000 : (parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100), // Más permisivo en desarrollo
   message: { error: "Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -142,7 +142,7 @@ const generalLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5, // Límite más estricto para autenticación
+  max: process.env.NODE_ENV === 'development' ? 50 : 5, // Más permisivo en desarrollo
   message: { error: "Demasiados intentos de autenticación, intenta de nuevo más tarde." },
   standardHeaders: true,
   legacyHeaders: false,

@@ -146,8 +146,32 @@ const Audit = () => {
     })
   }
 
-  const handleExportLogs = () => {
-    toast('Exportando logs de auditoría', { icon: '📋' })
+  const handleExportLogs = async () => {
+    try {
+      toast.loading('Exportando logs de auditoría...')
+      const response = await auditAPI.export({
+        action: selectedAction !== 'all' ? selectedAction : undefined,
+        period: selectedPeriod,
+        format: 'excel'
+      })
+      
+      // Crear y descargar el archivo
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `auditoria-${selectedPeriod}-${new Date().toISOString().split('T')[0]}.xlsx`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      toast.dismiss()
+      toast.success('Logs de auditoría exportados exitosamente')
+    } catch (error) {
+      toast.dismiss()
+      console.error('Error exportando logs:', error)
+      toast.error('Error al exportar los logs de auditoría')
+    }
   }
 
   const handleRefreshLogs = () => {
