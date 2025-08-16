@@ -103,13 +103,6 @@ export const workflowsAPI = {
   getStats: () => api.get('/workflows/stats/overview'),
 }
 
-// Notificaciones
-export const notificationsAPI = {
-  getAll: (params) => api.get('/notifications', { params }),
-  markAsRead: (id) => api.put(`/notifications/${id}/read`),
-  markAllAsRead: () => api.put('/notifications/read-all'),
-  getUnreadCount: () => api.get('/notifications/unread-count'),
-}
 
 // Reportes
 export const reportsAPI = {
@@ -153,6 +146,36 @@ export const notificationsAPI = {
   markAllAsRead: () => api.put('/notifications/read-all'),
   getUnreadCount: () => api.get('/notifications/unread-count'),
   delete: (id) => api.delete(`/notifications/${id}`),
+}
+
+// Gestión de Documentos Requeridos
+export const documentRequirementsAPI = {
+  // Para usuarios regulares
+  getMyRequirements: () => api.get('/document-requirements/my-requirements'),
+  getPendingDocuments: () => api.get('/document-requirements/pending'),
+  getExpiringDocuments: () => api.get('/document-requirements/expiring'),
+  uploadDocument: (requirementId, formData) => api.post(`/document-requirements/${requirementId}/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  
+  // Para administradores
+  getDocumentTypes: () => api.get('/document-requirements/types'),
+  createDocumentType: (typeData) => api.post('/document-requirements/types', typeData),
+  updateDocumentType: (id, typeData) => api.put(`/document-requirements/types/${id}`, typeData),
+  deleteDocumentType: (id) => api.delete(`/document-requirements/types/${id}`),
+  
+  getGlobalSummary: () => api.get('/document-requirements/summary/global'),
+  getDepartmentSummary: (department) => api.get(`/document-requirements/summary/department/${department}`),
+  getAllDepartmentSummaries: () => api.get('/document-requirements/summary/departments'),
+  getAllUserRequirements: (params) => api.get('/document-requirements/all', { params }),
+  
+  // Asignar documentos a usuarios
+  assignDocumentToUser: (assignmentData) => api.post('/document-requirements/assign', assignmentData),
+  assignDocumentToDepartment: (assignmentData) => api.post('/document-requirements/assign-department', assignmentData),
+  
+  // Recordatorios
+  sendReminder: (requirementId) => api.post(`/document-requirements/${requirementId}/reminder`),
+  processAllReminders: () => api.post('/document-requirements/process-reminders'),
 }
 
 export default api
