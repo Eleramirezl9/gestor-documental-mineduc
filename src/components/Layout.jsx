@@ -13,7 +13,8 @@ import {
   User,
   Shield,
   Home,
-  Bot
+  Bot,
+  UserCheck
 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -40,6 +41,7 @@ const Layout = () => {
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Documentos', href: '/documents', icon: FileText },
     { name: 'Usuarios', href: '/users', icon: Users },
+    { name: 'Empleados', href: '/employees', icon: UserCheck, adminOnly: true },
     { name: 'Notificaciones', href: '/notifications', icon: Bell },
     { name: 'Automatización', href: '/automation', icon: Bot, adminOnly: true },
     { name: 'Reportes', href: '/reports', icon: BarChart3 },
