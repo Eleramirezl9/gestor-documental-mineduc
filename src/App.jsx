@@ -9,6 +9,7 @@ import Users from './pages/Users'
 import Reports from './pages/Reports'
 import Audit from './pages/Audit'
 import Settings from './pages/Settings'
+import Notifications from './pages/Notifications'
 import './App.css'
 
 // Componente para rutas protegidas
@@ -66,6 +67,7 @@ function App() {
               <Route path="users" element={<Users />} />
               <Route path="reports" element={<Reports />} />
               <Route path="audit" element={<Audit />} />
+              <Route path="notifications" element={<Notifications />} />
               <Route path="settings" element={<Settings />} />
             </Route>
             

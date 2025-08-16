@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu'
 import { useAuth } from '../hooks/useAuth'
+import IntuitivNotificationCenter from './IntuitivNotificationCenter'
 import toast from 'react-hot-toast'
 
 const Layout = () => {
@@ -38,6 +39,7 @@ const Layout = () => {
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Documentos', href: '/documents', icon: FileText },
     { name: 'Usuarios', href: '/users', icon: Users },
+    { name: 'Notificaciones', href: '/notifications', icon: Bell },
     { name: 'Reportes', href: '/reports', icon: BarChart3 },
     { name: 'Auditoría', href: '/audit', icon: Shield },
     { name: 'Configuración', href: '/settings', icon: Settings },
@@ -168,12 +170,7 @@ const Layout = () => {
 
             <div className="flex items-center space-x-4">
               {/* Notificaciones */}
-              <Button variant="ghost" size="sm" className="relative">
-                <Bell className="h-5 w-5" />
-                <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs">
-                  3
-                </Badge>
-              </Button>
+              <IntuitivNotificationCenter />
 
               {/* Menú de usuario */}
               <DropdownMenu>
