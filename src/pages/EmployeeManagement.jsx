@@ -71,6 +71,8 @@ const EmployeeManagement = () => {
 
     try {
       const response = await api.post('/employee-documents/register', newEmployee);
+      
+      if (response.ok || response.status === 200 || response.status === 201) {
         toast.success('Empleado registrado exitosamente');
         setNewEmployee({
           email: '',
