@@ -1,4 +1,5 @@
 const { supabase } = require('../config/supabase');
+const XLSX = require('xlsx');
 
 class AuditService {
   /**
@@ -116,30 +117,66 @@ class AuditService {
   }
 
   /**
-   * Exporta logs de auditoría en formato CSV
+   * Exporta logs de auditoría en formato CSV o Excel
    * @param {Object} filters - Filtros para la exportación
+   * @param {string} filters.format - Formato de exportación (csv o excel)
    */
   async exportLogs(filters = {}) {
     try {
       const logs = await this.getLogs({ ...filters, limit: 10000 });
+      const format = filters.format || 'csv';
       
-      // Convertir a CSV
-      const headers = ['Timestamp', 'Usuario', 'Email', 'Acción', 'Detalles', 'IP'];
-      const csvRows = [headers.join(',')];
+      // Preparar datos
+      const data = logs.map(log => ({
+        'Fecha y Hora': new Date(log.timestamp).toLocaleString('es-GT'),
+        'Usuario': log.user_profiles ? `${log.user_profiles.first_name} ${log.user_profiles.last_name}` : 'Sistema',
+        'Email': log.user_profiles ? log.user_profiles.email : '',
+        'Acción': log.action,
+        'Detalles': typeof log.details === 'object' ? JSON.stringify(log.details) : log.details,
+        'Dirección IP': log.ip_address || 'N/A'
+      }));
 
-      logs.forEach(log => {
-        const row = [
-          log.timestamp,
-          log.user_profiles ? `${log.user_profiles.first_name} ${log.user_profiles.last_name}` : 'Sistema',
-          log.user_profiles ? log.user_profiles.email : '',
-          log.action,
-          JSON.stringify(log.details).replace(/"/g, '""'),
-          log.ip_address
+      if (format === 'excel') {
+        // Crear workbook de Excel
+        const workbook = XLSX.utils.book_new();
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        
+        // Ajustar ancho de columnas
+        const colWidths = [
+          { wch: 20 }, // Fecha y Hora
+          { wch: 25 }, // Usuario
+          { wch: 30 }, // Email
+          { wch: 20 }, // Acción
+          { wch: 50 }, // Detalles
+          { wch: 15 }  // IP
         ];
-        csvRows.push(row.map(field => `"${field}"`).join(','));
-      });
+        worksheet['!cols'] = colWidths;
+        
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Logs de Auditoría');
+        
+        // Convertir a buffer
+        return XLSX.write(workbook, { 
+          type: 'buffer', 
+          bookType: 'xlsx',
+          bookSST: false 
+        });
+        
+      } else {
+        // Convertir a CSV
+        const headers = Object.keys(data[0] || {});
+        const csvRows = [headers.join(',')];
 
-      return csvRows.join('\n');
+        data.forEach(row => {
+          const values = headers.map(header => {
+            const value = row[header] || '';
+            // Escapar comillas dobles y envolver en comillas
+            return `"${String(value).replace(/"/g, '""')}"`;
+          });
+          csvRows.push(values.join(','));
+        });
+
+        return csvRows.join('\n');
+      }
 
     } catch (error) {
       console.error('Error exportando logs:', error);

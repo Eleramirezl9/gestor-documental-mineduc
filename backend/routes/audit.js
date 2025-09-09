@@ -944,5 +944,179 @@ router.get('/activity/recent', verifyToken, requireRole(['admin']), async (req, 
   }
 });
 
+/**
+ * @swagger
+ * /api/audit/export:
+ *   get:
+ *     summary: Exportar logs de auditoría en múltiples formatos
+ *     description: Genera y descarga un archivo con los logs de auditoría en formato CSV o Excel (solo admins)
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: format
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [csv, excel]
+ *           default: csv
+ *         description: "Formato de exportación (csv o excel)"
+ *       - in: query
+ *         name: period
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [7days, 30days, 90days, 1year, all]
+ *           default: 30days
+ *         description: "Período de tiempo para exportar"
+ *       - in: query
+ *         name: startDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: "Fecha de inicio personalizada"
+ *       - in: query
+ *         name: endDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: "Fecha de fin personalizada"
+ *       - in: query
+ *         name: userId
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: "Filtrar por usuario específico"
+ *       - in: query
+ *         name: action
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: "Filtrar por acción específica"
+ *     responses:
+ *       200:
+ *         description: Archivo generado exitosamente
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *         headers:
+ *           Content-Disposition:
+ *             schema:
+ *               type: string
+ *             description: 'attachment; filename="audit_logs_YYYY-MM-DD.{format}"'
+ *       400:
+ *         description: Error de validación o al generar el archivo
+ *       401:
+ *         description: Token no válido o ausente
+ *       403:
+ *         description: Solo administradores pueden exportar logs de auditoría
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.get('/export', verifyToken, requireRole(['admin']), [
+  query('format').optional().isIn(['csv', 'excel']).withMessage('Formato debe ser csv o excel'),
+  query('period').optional().isIn(['7days', '30days', '90days', '1year', 'all']).withMessage('Período inválido'),
+  query('startDate').optional().isISO8601().withMessage('Fecha de inicio inválida'),
+  query('endDate').optional().isISO8601().withMessage('Fecha de fin inválida'),
+  query('userId').optional().isUUID().withMessage('ID de usuario inválido'),
+  query('action').optional().trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const format = req.query.format || 'csv';
+    const period = req.query.period || '30days';
+    
+    // Calcular fechas basado en el período
+    let startDate, endDate;
+    
+    if (req.query.startDate && req.query.endDate) {
+      startDate = req.query.startDate;
+      endDate = req.query.endDate;
+    } else {
+      endDate = new Date().toISOString();
+      const now = new Date();
+      
+      switch (period) {
+        case '7days':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case '30days':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case '90days':
+          startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case '1year':
+          startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case 'all':
+          startDate = null;
+          break;
+        default:
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      }
+    }
+
+    // Usar el servicio de auditoría para exportar
+    const exportData = await auditService.exportLogs({
+      format,
+      startDate,
+      endDate,
+      userId: req.query.userId,
+      action: req.query.action
+    });
+
+    // Registrar exportación en auditoría
+    await auditService.log({
+      user_id: req.user.id,
+      action: 'AUDIT_EXPORT',
+      entity_type: 'audit_log',
+      details: { 
+        format,
+        period,
+        startDate,
+        endDate,
+        filters: {
+          userId: req.query.userId,
+          action: req.query.action
+        }
+      },
+      ip_address: req.ip
+    });
+
+    // Configurar headers de respuesta
+    const timestamp = new Date().toISOString().substring(0, 10);
+    const extension = format === 'excel' ? 'xlsx' : 'csv';
+    const fileName = `audit_logs_${timestamp}.${extension}`;
+    
+    if (format === 'excel') {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    } else {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    }
+    
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(exportData);
+
+  } catch (error) {
+    console.error('Error exportando logs de auditoría:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 module.exports = router;
 
