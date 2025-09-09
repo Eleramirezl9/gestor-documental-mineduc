@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import api from '../lib/api'
 import { 
   Bot,
   Mail,
@@ -103,16 +104,8 @@ const NotificationAutomation = () => {
 
   const loadServiceStatus = async () => {
     try {
-      const response = await fetch('/api/automated-notifications/status', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setServiceStatus(data)
-      }
+      const response = await api.get('/automated-notifications/status')
+      setServiceStatus(response.data)
     } catch (error) {
       console.error('Error cargando estado del servicio:', error)
     }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { toast } from 'react-hot-toast';
+import api from '../lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -47,26 +48,14 @@ const EmployeeManagement = () => {
   const loadEmployees = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const params = new URLSearchParams();
+      const params = {};
       
-      if (filters.search) params.append('search', filters.search);
-      if (filters.department) params.append('department', filters.department);
-      if (filters.status) params.append('status', filters.status);
+      if (filters.search) params.search = filters.search;
+      if (filters.department) params.department = filters.department;
+      if (filters.status) params.status = filters.status;
       
-      const response = await fetch(`/api/employee-documents/employees?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setEmployees(data.employees || []);
-      } else {
-        throw new Error('Error cargando empleados');
-      }
+      const response = await api.get('/employee-documents/employees', { params });
+      setEmployees(response.data.employees || []);
     } catch (error) {
       console.error('Error:', error);
       toast.error('Error cargando empleados');
@@ -81,17 +70,7 @@ const EmployeeManagement = () => {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/employee-documents/register', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(newEmployee)
-      });
-
-      if (response.ok) {
+      const response = await api.post('/employee-documents/register', newEmployee);
         toast.success('Empleado registrado exitosamente');
         setNewEmployee({
           email: '',
@@ -121,34 +100,23 @@ const EmployeeManagement = () => {
   // Generar reporte
   const generateReport = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const params = new URLSearchParams();
+      const params = {};
       
-      if (filters.department) params.append('department', filters.department);
+      if (filters.department) params.department = filters.department;
       
-      const response = await fetch(`/api/employee-documents/report?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
+      const response = await api.get('/employee-documents/report', { params });
+      const data = response.data;
         
-        // Crear y descargar el reporte como JSON
-        const blob = new Blob([JSON.stringify(data.report, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `reporte-empleados-${new Date().toISOString().split('T')[0]}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        
-        toast.success('Reporte generado exitosamente');
-      } else {
-        throw new Error('Error generando reporte');
-      }
+      // Crear y descargar el reporte como JSON
+      const blob = new Blob([JSON.stringify(data.report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reporte-empleados-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      toast.success('Reporte generado exitosamente');
     } catch (error) {
       console.error('Error:', error);
       toast.error('Error generando reporte');
