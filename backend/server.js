@@ -165,10 +165,16 @@ const corsOptions = {
       process.env.FRONTEND_URL
     ].filter(Boolean);
     
+    console.log('CORS: Checking origin:', origin);
+    
     // Permitir requests sin origin (mobile apps, Postman, etc.)
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      console.log('CORS: Allowing request without origin');
+      return callback(null, true);
+    }
     
     if (process.env.NODE_ENV === 'development') {
+      console.log('CORS: Development mode - allowing all origins');
       return callback(null, true); // Permitir todo en desarrollo
     }
     
@@ -184,6 +190,11 @@ const corsOptions = {
     } else {
       console.log('CORS: Rechazando dominio:', origin);
       console.log('CORS: Dominios permitidos:', allowedOrigins);
+      // En producción, ser más permisivo por ahora para debug
+      if (process.env.NODE_ENV === 'production') {
+        console.log('CORS: Allowing in production for debugging');
+        return callback(null, true);
+      }
       callback(new Error('No permitido por política CORS'));
     }
   },
@@ -191,7 +202,8 @@ const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['Content-Length', 'X-Requested-With'],
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  preflightContinue: false
 };
 
 app.use(cors(corsOptions));

@@ -108,8 +108,15 @@ const router = express.Router();
 
 // Configuración de multer para subida de archivos
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+  destination: async (req, file, cb) => {
+    const uploadsDir = path.join(__dirname, '..', 'uploads');
+    try {
+      await fs.mkdir(uploadsDir, { recursive: true });
+      cb(null, uploadsDir);
+    } catch (error) {
+      console.error('Error creando directorio uploads:', error);
+      cb(error);
+    }
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -749,20 +756,26 @@ router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.sin
     let extractedText = '';
     try {
       if (['pdf', 'jpg', 'jpeg', 'png'].includes(path.extname(req.file.originalname).toLowerCase().substring(1))) {
+        console.log('🔍 Procesando OCR para archivo:', req.file.originalname);
         extractedText = await ocrService.extractText(req.file.path);
+        console.log('✅ OCR completado, caracteres extraídos:', extractedText.length);
       }
     } catch (ocrError) {
-      console.error('Error en OCR:', ocrError);
+      console.error('❌ Error en OCR:', ocrError.message);
+      // No fallar la subida si OCR falla, solo registrar el error
     }
 
     // Clasificación automática con IA
     let aiClassification = null;
     try {
       if (extractedText) {
+        console.log('🤖 Iniciando clasificación IA...');
         aiClassification = await aiService.classifyDocument(extractedText, req.file.originalname);
+        console.log('✅ Clasificación IA completada:', aiClassification?.category || 'Sin categoría');
       }
     } catch (aiError) {
-      console.error('Error en clasificación IA:', aiError);
+      console.error('❌ Error en clasificación IA:', aiError.message);
+      // No fallar la subida si IA falla, solo registrar el error
     }
 
     // Crear documento en la base de datos
