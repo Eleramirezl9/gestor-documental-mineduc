@@ -150,42 +150,38 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use(generalLimiter);
-app.use('/api/auth', authLimiter);
-
-// CORS - configuración simplificada y más permisiva para solucionar problemas
-const corsOptions = {
-  origin: true, // Permitir todos los orígenes temporalmente para debugging
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'Accept',
-    'Origin',
-    'Access-Control-Request-Method',
-    'Access-Control-Request-Headers'
-  ],
-  exposedHeaders: ['Content-Length', 'X-Requested-With'],
-  optionsSuccessStatus: 200,
-  preflightContinue: false,
-  maxAge: 86400 // Cache preflight for 24 hours
-};
-
-// Log de CORS para debugging
+// CORS manual - aplicar headers ANTES que cualquier otra cosa
 app.use((req, res, next) => {
-  console.log(`🌐 ${req.method} ${req.path} from origin: ${req.headers.origin || 'no-origin'}`);
+  const origin = req.headers.origin;
+  console.log(`🌐 ${req.method} ${req.path} from origin: ${origin || 'no-origin'}`);
+  
+  // Establecer headers CORS manualmente
+  res.header('Access-Control-Allow-Origin', origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
+  res.header('Access-Control-Allow-Headers', 'Origin,X-Requested-With,Content-Type,Accept,Authorization,Cache-Control');
+  res.header('Access-Control-Max-Age', '86400');
+  
+  // Responder a OPTIONS requests inmediatamente
+  if (req.method === 'OPTIONS') {
+    console.log('🔄 OPTIONS preflight request handled');
+    return res.status(200).end();
+  }
+  
   next();
 });
 
-app.use(cors(corsOptions));
+app.use(generalLimiter);
+app.use('/api/auth', authLimiter);
 
-// Manejar OPTIONS requests explícitamente
-app.options('*', (req, res) => {
-  console.log('🔄 OPTIONS request for:', req.path);
-  res.status(200).end();
-});
+// CORS adicional con librería como respaldo
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'Cache-Control'],
+  optionsSuccessStatus: 200
+}));
 
 // Logging
 app.use(morgan("combined"));
@@ -392,6 +388,7 @@ app.use("*", (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
   console.log(`🌍 Ambiente: ${process.env.NODE_ENV || "development"}`);
+  console.log(`🔧 CORS fix aplicado - timestamp: ${new Date().toISOString()}`);
 });
 
 module.exports = app;
