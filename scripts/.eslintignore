@@ -1,0 +1,11 @@
+# Ignorar archivos legacy con problemas ESLint
+verify-deployment.js
+test-supabase-connection.js
+test-supabase-fixed.js
+supabase-manager.js
+
+# Solo usar los archivos corregidos:
+# - verify-deployment-fixed.cjs ✅
+# - test-supabase-fixed.cjs ✅
+# - supabase-manager.mjs ✅
+# - simple-verify.mjs ✅

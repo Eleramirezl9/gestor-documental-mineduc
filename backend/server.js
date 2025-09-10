@@ -294,7 +294,7 @@ app.use("/api/settings", require("./routes/settings"));
  * /health:
  *   get:
  *     summary: Verificar el estado de salud del servidor
- *     description: Endpoint para verificar que el servidor está funcionando correctamente
+ *     description: Endpoint para verificar que el servidor está funcionando correctamente, incluyendo conexiones a DB y storage
  *     tags: [Health Check]
  *     responses:
  *       200:
@@ -304,9 +304,34 @@ app.use("/api/settings", require("./routes/settings"));
  *             schema:
  *               type: object
  *               properties:
- *                 status:
+ *                 overall:
  *                   type: string
- *                   example: "OK"
+ *                   enum: [healthy, warning, error]
+ *                   example: "healthy"
+ *                 checks:
+ *                   type: object
+ *                   properties:
+ *                     database:
+ *                       type: object
+ *                       properties:
+ *                         status:
+ *                           type: string
+ *                         message:
+ *                           type: string
+ *                     storage:
+ *                       type: object
+ *                       properties:
+ *                         status:
+ *                           type: string
+ *                         message:
+ *                           type: string
+ *                     environment:
+ *                       type: object
+ *                       properties:
+ *                         status:
+ *                           type: string
+ *                         message:
+ *                           type: string
  *                 timestamp:
  *                   type: string
  *                   format: date-time
@@ -314,13 +339,28 @@ app.use("/api/settings", require("./routes/settings"));
  *                 environment:
  *                   type: string
  *                   example: "development"
+ *       503:
+ *         description: Servidor con problemas
  */
-app.get("/health", (req, res) => {
-  res.json({
-    status: "OK",
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || "development",
-  });
+app.get("/health", async (req, res) => {
+  try {
+    const healthService = require('./services/healthService');
+    const healthCheck = await healthService.getFullHealthCheck();
+    
+    const statusCode = healthCheck.overall === 'healthy' ? 200 
+                      : healthCheck.overall === 'warning' ? 200 
+                      : 503;
+    
+    res.status(statusCode).json(healthCheck);
+  } catch (error) {
+    console.error('Error en health check:', error);
+    res.status(503).json({
+      overall: 'error',
+      message: 'Error interno en verificación de salud',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || "development"
+    });
+  }
 });
 
 // Manejo de errores global
