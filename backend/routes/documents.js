@@ -335,7 +335,7 @@ router.get('/', verifyToken, [
  *       500:
  *         description: Error interno del servidor
  */
-router.get('/stats/overview', verifyToken, requireRole(['admin', 'editor']), async (req, res) => {
+router.get('/stats/overview', verifyToken, async (req, res) => {
   try {
     // Obtener conteos por estado
     const { data: statusStats, error: statusError } = await require('../config/supabase').supabaseAdmin
@@ -711,8 +711,14 @@ router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.sin
   body('isPublic').optional()
 ], async (req, res) => {
   try {
-    console.log('Request body:', req.body);
-    console.log('Request file:', req.file);
+    console.log('📤 Document upload attempt:', {
+      user: req.user?.profile?.email,
+      role: req.user?.profile?.role,
+      hasFile: !!req.file,
+      fileName: req.file?.originalname,
+      fileSize: req.file?.size,
+      title: req.body?.title
+    });
     
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -736,10 +742,12 @@ router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.sin
     }
 
     // Subir archivo a Supabase Storage primero
+    console.log('📁 Reading file from:', req.file.path);
     const fileBuffer = await fs.readFile(req.file.path);
     const fileId = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const fileName = `documents/${fileId}/${req.file.filename}`;
 
+    console.log('☁️ Uploading to Supabase Storage:', fileName);
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('documents')
       .upload(fileName, fileBuffer, {
@@ -748,9 +756,12 @@ router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.sin
       });
 
     if (uploadError) {
-      await fs.unlink(req.file.path);
+      console.error('❌ Supabase upload error:', uploadError);
+      await fs.unlink(req.file.path).catch(console.error);
       return res.status(400).json({ error: 'Error subiendo archivo: ' + uploadError.message });
     }
+
+    console.log('✅ File uploaded to Supabase:', uploadData.path);
 
     // Procesar archivo con OCR si es necesario
     let extractedText = '';
@@ -779,33 +790,41 @@ router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.sin
     }
 
     // Crear documento en la base de datos
+    console.log('💾 Creating document in database...');
+    const documentData = {
+      title,
+      description: description || null,
+      file_name: req.file.originalname,
+      file_path: uploadData.path,
+      file_size: req.file.size,
+      file_type: path.extname(req.file.originalname).toLowerCase().substring(1),
+      mime_type: req.file.mimetype,
+      category_id: categoryId || null,
+      tags: tags,
+      status: 'pending',
+      is_public: isPublic === 'true',
+      extracted_text: extractedText,
+      ai_classification: aiClassification,
+      created_by: req.user.id
+    };
+
+    console.log('Document data to insert:', { ...documentData, extracted_text: extractedText ? `${extractedText.length} chars` : 'none' });
+
     const { data, error } = await supabase
       .from('documents')
-      .insert([{
-        title,
-        description: description || null,
-        file_name: req.file.originalname,
-        file_path: uploadData.path,
-        file_size: req.file.size,
-        file_type: path.extname(req.file.originalname).toLowerCase().substring(1),
-        mime_type: req.file.mimetype,
-        category_id: categoryId || null,
-        tags: tags,
-        status: 'pending',
-        is_public: isPublic === 'true',
-        extracted_text: extractedText,
-        ai_classification: aiClassification,
-        created_by: req.user.id
-      }])
+      .insert([documentData])
       .select()
       .single();
 
     if (error) {
+      console.error('❌ Database insert error:', error);
       // Si falla la creación del documento, eliminar el archivo subido
-      await supabase.storage.from('documents').remove([uploadData.path]);
-      await fs.unlink(req.file.path);
+      await supabase.storage.from('documents').remove([uploadData.path]).catch(console.error);
+      await fs.unlink(req.file.path).catch(console.error);
       return res.status(400).json({ error: error.message });
     }
+
+    console.log('✅ Document created in database:', data.id);
 
     // Limpiar archivo temporal
     await fs.unlink(req.file.path);

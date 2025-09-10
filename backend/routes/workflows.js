@@ -1034,42 +1034,62 @@ router.post('/:id/cancel', verifyToken, [
  *       500:
  *         description: Error interno del servidor
  */
-router.get('/stats/overview', verifyToken, requireRole(['admin', 'editor']), async (req, res) => {
+router.get('/stats/overview', verifyToken, async (req, res) => {
   try {
-    // Obtener conteos por estado
-    const { data: statusStats, error: statusError } = await require('../config/supabase').supabaseAdmin
+    console.log('📊 Fetching workflow stats for user:', req.user?.profile?.role);
+    
+    // Obtener conteos por estado con filtro basado en permisos
+    let query = require('../config/supabase').supabaseAdmin
       .from('workflows')
       .select('status');
 
+    // Si el usuario no es admin, filtrar por workflows que puede ver
+    if (req.user?.profile?.role !== 'admin') {
+      query = query.or(`requester_id.eq.${req.user.id},current_approver_id.eq.${req.user.id}`);
+    }
+
+    const { data: statusStats, error: statusError } = await query;
+
     if (statusError) {
+      console.error('Error fetching workflow stats:', statusError);
       return res.status(400).json({ error: statusError.message });
     }
 
-    const statusCounts = statusStats.reduce((acc, workflow) => {
+    const statusCounts = (statusStats || []).reduce((acc, workflow) => {
       acc[workflow.status] = (acc[workflow.status] || 0) + 1;
       return acc;
     }, {});
 
-    // Obtener workflows vencidos
-    const { data: overdueWorkflows, error: overdueError } = await supabase
+    // Obtener workflows vencidos con el mismo filtro
+    let overdueQuery = require('../config/supabase').supabaseAdmin
       .from('workflows')
       .select('id')
       .in('status', ['pending', 'in_progress'])
       .lt('due_date', new Date().toISOString());
 
+    if (req.user?.profile?.role !== 'admin') {
+      overdueQuery = overdueQuery.or(`requester_id.eq.${req.user.id},current_approver_id.eq.${req.user.id}`);
+    }
+
+    const { data: overdueWorkflows, error: overdueError } = await overdueQuery;
+
     if (overdueError) {
+      console.error('Error fetching overdue workflows:', overdueError);
       return res.status(400).json({ error: overdueError.message });
     }
 
-    res.json({
-      total: statusStats.length,
+    const stats = {
+      total: statusStats?.length || 0,
       pending: statusCounts.pending || 0,
       in_progress: statusCounts.in_progress || 0,
       approved: statusCounts.approved || 0,
       rejected: statusCounts.rejected || 0,
       cancelled: statusCounts.cancelled || 0,
-      overdue: overdueWorkflows.length
-    });
+      overdue: overdueWorkflows?.length || 0
+    };
+
+    console.log('✅ Workflow stats retrieved:', stats);
+    res.json(stats);
 
   } catch (error) {
     console.error('Error obteniendo estadísticas de workflows:', error);
