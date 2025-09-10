@@ -153,60 +153,39 @@ const authLimiter = rateLimit({
 app.use(generalLimiter);
 app.use('/api/auth', authLimiter);
 
-// CORS - configuración dinámica para desarrollo y producción
+// CORS - configuración simplificada y más permisiva para solucionar problemas
 const corsOptions = {
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      'http://localhost:5173',
-      'http://localhost:3000',
-      'https://gestor-documental-mineduc.vercel.app',
-      'https://gestor-documental-mineduc-20wdhsthk.vercel.app',
-      'https://gestor-documental-mineduc-hkn00xj87.vercel.app', // Nueva URL de Vercel
-      process.env.FRONTEND_URL
-    ].filter(Boolean);
-    
-    console.log('CORS: Checking origin:', origin);
-    
-    // Permitir requests sin origin (mobile apps, Postman, etc.)
-    if (!origin) {
-      console.log('CORS: Allowing request without origin');
-      return callback(null, true);
-    }
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log('CORS: Development mode - allowing all origins');
-      return callback(null, true); // Permitir todo en desarrollo
-    }
-    
-    // También permitir cualquier subdominio de vercel.app en producción
-    if (origin && /^https:\/\/.*\.vercel\.app$/.test(origin)) {
-      console.log('CORS: Permitiendo dominio Vercel:', origin);
-      return callback(null, true);
-    }
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      console.log('CORS: Permitiendo dominio específico:', origin);
-      callback(null, true);
-    } else {
-      console.log('CORS: Rechazando dominio:', origin);
-      console.log('CORS: Dominios permitidos:', allowedOrigins);
-      // En producción, ser más permisivo por ahora para debug
-      if (process.env.NODE_ENV === 'production') {
-        console.log('CORS: Allowing in production for debugging');
-        return callback(null, true);
-      }
-      callback(new Error('No permitido por política CORS'));
-    }
-  },
+  origin: true, // Permitir todos los orígenes temporalmente para debugging
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers'
+  ],
   exposedHeaders: ['Content-Length', 'X-Requested-With'],
   optionsSuccessStatus: 200,
-  preflightContinue: false
+  preflightContinue: false,
+  maxAge: 86400 // Cache preflight for 24 hours
 };
 
+// Log de CORS para debugging
+app.use((req, res, next) => {
+  console.log(`🌐 ${req.method} ${req.path} from origin: ${req.headers.origin || 'no-origin'}`);
+  next();
+});
+
 app.use(cors(corsOptions));
+
+// Manejar OPTIONS requests explícitamente
+app.options('*', (req, res) => {
+  console.log('🔄 OPTIONS request for:', req.path);
+  res.status(200).end();
+});
 
 // Logging
 app.use(morgan("combined"));
