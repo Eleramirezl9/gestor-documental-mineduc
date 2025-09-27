@@ -403,16 +403,228 @@ Sistema de Gestión Documental - MINEDUC
   }
 
   /**
+   * Envía email de bienvenida a nuevo usuario
+   */
+  async sendWelcomeEmail({ userEmail, userName, userRole, userDepartment, loginLink }) {
+    const subject = `🎉 Bienvenido al Sistema Documental MINEDUC - ${userName}`;
+
+    const roleDisplay = {
+      'admin': '👑 Administrador',
+      'editor': '✏️ Editor',
+      'viewer': '👀 Visor',
+      'employee': '👤 Empleado'
+    }[userRole] || '❓ Sin definir';
+
+    const message = `
+      ¡Te damos la bienvenida al <strong>Sistema de Gestión Documental del Ministerio de Educación</strong>!
+      Tu cuenta ha sido creada exitosamente y ya puedes acceder al sistema.
+      <br><br>
+      <strong>📋 Detalles de tu cuenta:</strong><br>
+      • Email: ${userEmail}<br>
+      • Rol: ${roleDisplay}<br>
+      • Departamento: ${userDepartment || 'No asignado'}<br>
+      <br>
+      <strong>🚀 ¿Qué puedes hacer ahora?</strong><br>
+      • Acceder al sistema con tu email y la contraseña proporcionada<br>
+      • Completar tu perfil con información adicional<br>
+      • Comenzar a gestionar documentos según tu rol<br>
+      • Recibir notificaciones automáticas sobre documentos pendientes<br>
+      <br>
+      <strong>⚡ Recordatorio importante:</strong><br>
+      Este es un sistema oficial del Ministerio de Educación. Mantén tus credenciales seguras
+      y no compartas tu acceso con otras personas.
+    `;
+
+    const htmlContent = this.generateEmailTemplate({
+      title: 'Bienvenido al Sistema MINEDUC',
+      message,
+      actionUrl: loginLink || '/login',
+      actionText: '🔐 Acceder al Sistema',
+      userName,
+      documentDetails: {
+        title: 'Tu Nueva Cuenta',
+        type: 'Información de Acceso',
+        status: 'Activa',
+        description: `Rol: ${roleDisplay} | Departamento: ${userDepartment || 'No asignado'}`
+      }
+    });
+
+    const textContent = `
+Hola ${userName},
+
+¡Bienvenido al Sistema de Gestión Documental del MINEDUC!
+
+Tu cuenta ha sido creada exitosamente.
+
+Detalles de tu cuenta:
+- Email: ${userEmail}
+- Rol: ${roleDisplay}
+- Departamento: ${userDepartment || 'No asignado'}
+
+Accede al sistema en: ${process.env.FRONTEND_URL || 'http://localhost:5173'}${loginLink || '/login'}
+
+Saludos,
+Sistema de Gestión Documental - MINEDUC
+`;
+
+    return await this.sendEmail({
+      to: userEmail,
+      subject,
+      htmlContent,
+      textContent
+    });
+  }
+
+  /**
+   * Envía recordatorio general a usuario
+   */
+  async sendGeneralReminder({ userEmail, userName, reminderType, customMessage }) {
+    const subject = `📄 Recordatorio: ${reminderType} - Sistema MINEDUC`;
+
+    const message = customMessage || `
+      Este es un recordatorio del Sistema de Gestión Documental del MINEDUC.
+      <br><br>
+      Te recordamos revisar tus documentos pendientes y mantener tu información actualizada.
+      <br><br>
+      Si tienes alguna duda o necesitas asistencia, no dudes en contactar al administrador del sistema.
+    `;
+
+    const htmlContent = this.generateEmailTemplate({
+      title: `Recordatorio: ${reminderType}`,
+      message,
+      actionUrl: '/documents',
+      actionText: '📄 Ver Mis Documentos',
+      userName
+    });
+
+    const textContent = `
+Hola ${userName},
+
+${message.replace(/<[^>]*>/g, '')}
+
+Accede al sistema en: ${process.env.FRONTEND_URL || 'http://localhost:5173'}/documents
+
+Saludos,
+Sistema de Gestión Documental - MINEDUC
+`;
+
+    return await this.sendEmail({
+      to: userEmail,
+      subject,
+      htmlContent,
+      textContent
+    });
+  }
+
+  /**
+   * Envía notificación de documento subido exitosamente
+   */
+  async sendDocumentUploadConfirmation({ userEmail, userName, document }) {
+    const subject = `📤 Documento Recibido: ${document.title || 'Sin título'}`;
+
+    const message = `
+      Hemos recibido tu documento <strong>"${document.title || 'Sin título'}"</strong> exitosamente.
+      <br><br>
+      Tu documento será revisado por nuestro equipo y recibirás una notificación con
+      el resultado en los próximos días hábiles.
+      <br><br>
+      <strong>Gracias por utilizar el Sistema de Gestión Documental del MINEDUC.</strong>
+    `;
+
+    const htmlContent = this.generateEmailTemplate({
+      title: 'Documento Recibido Exitosamente',
+      message,
+      actionUrl: '/documents',
+      actionText: '📄 Ver Mis Documentos',
+      userName,
+      documentDetails: {
+        title: document.title || 'Sin título',
+        type: document.type || 'Documento',
+        status: 'Pendiente de revisión',
+        description: `Subido el ${new Date().toLocaleDateString('es-ES')} | Tamaño: ${document.file_size || 'No especificado'}`
+      }
+    });
+
+    const textContent = `
+Hola ${userName},
+
+Hemos recibido tu documento "${document.title || 'Sin título'}" exitosamente.
+
+Detalles del documento:
+- Nombre: ${document.title || 'Sin título'}
+- Fecha de subida: ${new Date().toLocaleDateString('es-ES')}
+- Estado: Pendiente de revisión
+
+Tu documento será revisado por nuestro equipo.
+
+Saludos,
+Sistema de Gestión Documental - MINEDUC
+`;
+
+    return await this.sendEmail({
+      to: userEmail,
+      subject,
+      htmlContent,
+      textContent
+    });
+  }
+
+  /**
+   * Genera link único y seguro para subida de documentos
+   */
+  generateSecureUploadLink(userId, documentTypeId) {
+    const timestamp = Date.now();
+    const randomString = Math.random().toString(36).substring(2, 15);
+    const token = Buffer.from(`${userId}:${documentTypeId}:${timestamp}:${randomString}`).toString('base64');
+
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    return `${baseUrl}/upload/${token}`;
+  }
+
+  /**
+   * Valida link de subida seguro
+   */
+  validateSecureUploadLink(token) {
+    try {
+      const decoded = Buffer.from(token, 'base64').toString('ascii');
+      const [userId, documentTypeId, timestamp, randomString] = decoded.split(':');
+
+      // Link válido por 7 días
+      const linkAge = Date.now() - parseInt(timestamp);
+      const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 días en milliseconds
+
+      if (linkAge > maxAge) {
+        return { valid: false, reason: 'Link expirado' };
+      }
+
+      return {
+        valid: true,
+        userId,
+        documentTypeId,
+        timestamp: parseInt(timestamp)
+      };
+
+    } catch (error) {
+      return { valid: false, reason: 'Link inválido' };
+    }
+  }
+
+  /**
    * Verifica configuración del servicio
    */
   async verifyConfiguration() {
     try {
+      if (!this.transporter) {
+        console.log('⚠️ Email service not configured, running in development mode');
+        return { configured: false, development: true };
+      }
+
       await this.transporter.verify();
       console.log('✅ Configuración de email verificada correctamente');
-      return true;
+      return { configured: true, development: false };
     } catch (error) {
       console.error('❌ Error en configuración de email:', error);
-      return false;
+      return { configured: false, development: false, error: error.message };
     }
   }
 }

@@ -3,14 +3,60 @@ const { supabase } = require('../config/supabase');
 /**
  * Servicio para gestión integral de colaboradores y sus documentos
  * Incluye control de vencimientos, notificaciones automáticas y reportes
+ * ACTUALIZADO: Usa base de datos real de Supabase
  */
 class EmployeeDocumentService {
   
   /**
-   * Registrar un nuevo colaborador en el sistema
+   * Obtener próximo employee_id disponible con formato MIN{año}{número secuencial}
    */
-  async registerEmployee(employeeData) {
+  async getNextEmployeeId() {
     try {
+      const currentYear = new Date().getFullYear().toString().slice(-2); // Últimos 2 dígitos del año
+
+      // Buscar el último ID del año actual
+      const { data: employees, error } = await supabase
+        .from('employees')
+        .select('employee_id')
+        .like('employee_id', `MIN${currentYear}%`)
+        .order('employee_id', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      let nextNumber = 1;
+
+      if (employees && employees.length > 0) {
+        // Extraer el número del último ID
+        const lastId = employees[0].employee_id;
+        const lastNumber = parseInt(lastId.replace(`MIN${currentYear}`, ''));
+        nextNumber = lastNumber + 1;
+      }
+
+      // Formatear con padding de ceros (3 dígitos)
+      const paddedNumber = nextNumber.toString().padStart(3, '0');
+      const newEmployeeId = `MIN${currentYear}${paddedNumber}`;
+
+      console.log(`🆔 Generando nuevo employee_id: ${newEmployeeId}`);
+      return newEmployeeId;
+
+    } catch (error) {
+      console.error('Error generando employee_id:', error);
+      // Fallback: generar ID basado en año y timestamp
+      const currentYear = new Date().getFullYear().toString().slice(-2);
+      const timestamp = Date.now().toString().slice(-3);
+      return `MIN${currentYear}${timestamp}`;
+    }
+  }
+
+  /**
+   * Registrar un nuevo colaborador en el sistema
+   * ACTUALIZADO: Implementación real con base de datos
+   */
+  async registerEmployee(employeeData, createdBy = null) {
+    try {
+      console.log('👤 Registrando nuevo empleado en base de datos...', employeeData);
+
       const {
         email,
         first_name,
@@ -20,49 +66,85 @@ class EmployeeDocumentService {
         employee_id,
         position,
         hire_date,
+        address,
+        date_of_birth,
+        national_id,
+        emergency_contact_name,
+        emergency_contact_phone,
+        emergency_contact_relationship,
         required_documents = []
       } = employeeData;
 
-      // 1. Crear perfil de usuario
-      const { data: userProfile, error: profileError } = await supabase
-        .from('user_profiles')
+      // Validaciones
+      if (!email || !first_name || !last_name || !department || !hire_date) {
+        throw new Error('Faltan campos requeridos: email, first_name, last_name, department, hire_date');
+      }
+
+      // Obtener próximo employee_id si no se proporciona
+      const finalEmployeeId = employee_id || await this.getNextEmployeeId();
+
+      // Insertar empleado en la base de datos
+      const { data: employee, error: employeeError } = await supabase
+        .from('employees')
         .insert([{
+          employee_id: finalEmployeeId,
           email,
           first_name,
           last_name,
           department,
-          phone,
-          role: 'viewer', // Por defecto
-          is_active: true,
-          employee_id,
           position,
-          hire_date
+          hire_date,
+          phone,
+          address,
+          date_of_birth,
+          national_id,
+          emergency_contact_name,
+          emergency_contact_phone,
+          emergency_contact_relationship,
+          is_active: true,
+          email_notifications: true,
+          created_by: createdBy
         }])
         .select()
         .single();
 
-      if (profileError) throw profileError;
+      if (employeeError) throw employeeError;
 
-      // 2. Crear documentos requeridos iniciales
+      console.log(`✅ Empleado registrado: ${first_name} ${last_name} (${employee.id})`);
+
+      // Crear requerimientos de documentos si se especificaron
+      const documentRequirements = [];
       if (required_documents.length > 0) {
-        const documentsToInsert = required_documents.map(doc => ({
-          user_id: userProfile.id,
-          document_type: doc.type,
-          required_date: doc.required_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 días por defecto
-          status: 'pending',
+        const requirementsData = required_documents.map(doc => ({
+          employee_id: employee.id,
+          document_type: doc.type || doc.document_type,
           description: doc.description || `Documento requerido para ${first_name} ${last_name}`,
-          created_by: doc.created_by
+          required_date: doc.required_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          priority: doc.priority || 'medium',
+          created_by: createdBy
         }));
 
-        await supabase
-          .from('document_requirements')
-          .insert(documentsToInsert);
+        const { data: requirements, error: reqError } = await supabase
+          .from('employee_document_requirements')
+          .insert(requirementsData)
+          .select();
+
+        if (reqError) {
+          console.error('Error creando requerimientos:', reqError);
+        } else {
+          documentRequirements.push(...requirements);
+          console.log(`📋 ${requirements.length} documentos requeridos creados`);
+        }
       }
+
+      // Obtener empleado con estado de documentos
+      const employeeWithStatus = await this.getEmployeeWithDocumentStatus(employee.id);
 
       return {
         success: true,
-        employee: userProfile,
-        message: `Colaborador ${first_name} ${last_name} registrado exitosamente`
+        employee: employeeWithStatus.success ? employeeWithStatus.employee : employee,
+        message: `Colaborador ${first_name} ${last_name} registrado exitosamente`,
+        requirements_created: documentRequirements.length
       };
 
     } catch (error) {
@@ -75,37 +157,126 @@ class EmployeeDocumentService {
   }
 
   /**
-   * Obtener colaboradores con estado de sus documentos
+   * Obtener un empleado específico con estado de documentos
+   * ACTUALIZADO: Implementación real con base de datos
    */
-  async getEmployeesWithDocumentStatus(filters = {}) {
+  async getEmployeeWithDocumentStatus(employeeId) {
     try {
-      const { 
-        department, 
-        status, 
-        expiring_soon,
-        search,
-        limit = 50,
-        offset = 0 
-      } = filters;
-
-      let query = supabase
-        .from('user_profiles')
+      // Obtener empleado con requerimientos de documentos
+      const { data: employee, error: employeeError } = await supabase
+        .from('employees')
         .select(`
           *,
-          documents:documents!user_id(
+          document_requirements:employee_document_requirements(
+            id,
+            document_type,
+            description,
+            required_date,
+            status,
+            priority,
+            document_id,
+            submitted_at,
+            approved_at,
+            rejected_at,
+            notes,
+            rejection_reason,
+            created_at,
+            updated_at
+          )
+        `)
+        .eq('id', employeeId)
+        .single();
+
+      if (employeeError) throw employeeError;
+
+      // Obtener documentos asociados al empleado
+      const documentIds = employee.document_requirements
+        .filter(req => req.document_id)
+        .map(req => req.document_id);
+
+      let documents = [];
+      if (documentIds.length > 0) {
+        const { data: docs, error: docsError } = await supabase
+          .from('documents')
+          .select(`
             id,
             title,
             status,
+            effective_date,
             expiration_date,
             created_at,
             category:document_categories(name, color)
-          ),
-          document_requirements:document_requirements!document_requirements_user_id_fkey(
+          `)
+          .in('id', documentIds);
+
+        if (!docsError) {
+          documents = docs;
+        }
+      }
+
+      // Calcular estados
+      const documentStatus = this.calculateDocumentStatus(documents);
+      const requirementStatus = this.calculateRequirementStatus(employee.document_requirements);
+
+      const enrichedEmployee = {
+        ...employee,
+        documents,
+        document_status: documentStatus,
+        requirement_status: requirementStatus,
+        overall_status: this.calculateOverallStatus(documentStatus, requirementStatus)
+      };
+
+      return {
+        success: true,
+        employee: enrichedEmployee
+      };
+
+    } catch (error) {
+      console.error('Error obteniendo empleado:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Obtener colaboradores con estado de sus documentos
+   * ACTUALIZADO: Implementación real con base de datos
+   */
+  async getEmployeesWithDocumentStatus(filters = {}) {
+    try {
+      console.log('📋 Obteniendo empleados con estado de documentos desde base de datos...');
+
+      const {
+        department,
+        status,
+        expiring_soon,
+        search,
+        limit = 50,
+        offset = 0
+      } = filters;
+
+      // Construir query base
+      let query = supabase
+        .from('employees')
+        .select(`
+          *,
+          document_requirements:employee_document_requirements(
             id,
             document_type,
-            status,
+            description,
             required_date,
-            created_at
+            status,
+            priority,
+            document_id,
+            submitted_at,
+            approved_at,
+            rejected_at,
+            notes,
+            rejection_reason,
+            created_at,
+            updated_at
           )
         `)
         .eq('is_active', true)
@@ -117,44 +288,86 @@ class EmployeeDocumentService {
       }
 
       if (search) {
-        query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`);
+        const searchTerm = search.toLowerCase();
+        query = query.or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,employee_id.ilike.%${searchTerm}%`);
       }
 
-      // Paginación
+      // Aplicar paginación
       query = query.range(offset, offset + limit - 1);
 
-      const { data: employees, error } = await query;
-      if (error) throw error;
+      const { data: employees, error: employeesError } = await query;
 
-      // Enriquecer con información de estado de documentos
+      if (employeesError) throw employeesError;
+
+      console.log(`📋 Obtenidos ${employees.length} empleados de la base de datos`);
+
+      // Obtener documentos para todos los empleados
+      const allDocumentIds = employees
+        .flatMap(emp => emp.document_requirements)
+        .filter(req => req.document_id)
+        .map(req => req.document_id);
+
+      let documentsMap = new Map();
+      if (allDocumentIds.length > 0) {
+        const { data: docs, error: docsError } = await supabase
+          .from('documents')
+          .select(`
+            id,
+            title,
+            status,
+            effective_date,
+            expiration_date,
+            created_at,
+            category:document_categories(name, color)
+          `)
+          .in('id', allDocumentIds);
+
+        if (!docsError) {
+          docs.forEach(doc => documentsMap.set(doc.id, doc));
+        }
+      }
+
+      // Enriquecer empleados con información de documentos y estados
       const enrichedEmployees = employees.map(employee => {
-        const documentStatus = this.calculateDocumentStatus(employee.documents || []);
-        const requirementStatus = this.calculateRequirementStatus(employee.document_requirements || []);
+        // Obtener documentos del empleado
+        const employeeDocuments = employee.document_requirements
+          .filter(req => req.document_id && documentsMap.has(req.document_id))
+          .map(req => documentsMap.get(req.document_id));
+
+        // Calcular estados
+        const documentStatus = this.calculateDocumentStatus(employeeDocuments);
+        const requirementStatus = this.calculateRequirementStatus(employee.document_requirements);
 
         return {
           ...employee,
+          documents: employeeDocuments,
           document_status: documentStatus,
           requirement_status: requirementStatus,
           overall_status: this.calculateOverallStatus(documentStatus, requirementStatus)
         };
       });
 
-      // Filtrar por estado si se especifica
+      // Aplicar filtros adicionales después del enriquecimiento
       let filteredEmployees = enrichedEmployees;
+
       if (status) {
-        filteredEmployees = enrichedEmployees.filter(emp => emp.overall_status === status);
+        filteredEmployees = filteredEmployees.filter(emp => emp.overall_status === status);
       }
 
       if (expiring_soon) {
-        filteredEmployees = enrichedEmployees.filter(emp => 
+        filteredEmployees = filteredEmployees.filter(emp =>
           emp.document_status.expiring_soon > 0
         );
       }
 
+      console.log(`✅ Devolviendo ${filteredEmployees.length} empleados después de filtros`);
+
       return {
         success: true,
         employees: filteredEmployees,
-        total: filteredEmployees.length
+        total: filteredEmployees.length,
+        page: Math.floor(offset / limit) + 1,
+        limit: limit
       };
 
     } catch (error) {
@@ -262,53 +475,153 @@ class EmployeeDocumentService {
 
   /**
    * Obtener documentos que van a vencer pronto
+   * ACTUALIZADO: Implementación real con base de datos
    */
   async getExpiringDocuments(days = 30) {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      console.log(`📅 Obteniendo documentos que vencen en ${days} días desde base de datos...`);
+
+      const today = new Date();
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + days);
-      const future = futureDate.toISOString().split('T')[0];
 
-      const { data: expiringDocs, error } = await supabase
+      // Obtener documentos que vencen en el rango especificado
+      const { data: expiringDocs, error: docsError } = await supabase
         .from('documents')
         .select(`
-          *,
-          user:user_profiles!user_id(
+          id,
+          title,
+          status,
+          expiration_date,
+          effective_date,
+          file_path,
+          created_at,
+          created_by,
+          category:document_categories(name, color),
+          user:user_profiles!created_by(
             id,
             first_name,
             last_name,
             email,
             department,
             phone
-          ),
-          category:document_categories(name, color)
+          )
         `)
         .eq('status', 'active')
         .not('expiration_date', 'is', null)
-        .lte('expiration_date', future)
-        .gte('expiration_date', today)
+        .gte('expiration_date', today.toISOString().split('T')[0])
+        .lte('expiration_date', futureDate.toISOString().split('T')[0])
         .order('expiration_date', { ascending: true });
 
-      if (error) throw error;
+      if (docsError) throw docsError;
 
-      // Agregar días restantes
-      const enrichedDocs = expiringDocs.map(doc => {
+      // También obtener documentos de empleados específicos a través de requirements
+      const { data: empRequirements, error: reqError } = await supabase
+        .from('employee_document_requirements')
+        .select(`
+          id,
+          document_type,
+          required_date,
+          status,
+          priority,
+          employee:employees(
+            id,
+            employee_id,
+            first_name,
+            last_name,
+            email,
+            department,
+            phone
+          ),
+          document:documents(
+            id,
+            title,
+            status,
+            expiration_date,
+            file_path,
+            created_at,
+            category:document_categories(name, color)
+          )
+        `)
+        .not('document_id', 'is', null)
+        .eq('documents.status', 'active')
+        .not('documents.expiration_date', 'is', null)
+        .gte('documents.expiration_date', today.toISOString().split('T')[0])
+        .lte('documents.expiration_date', futureDate.toISOString().split('T')[0]);
+
+      let allExpiringDocs = [...(expiringDocs || [])];
+
+      // Agregar documentos de empleados
+      if (!reqError && empRequirements) {
+        const employeeDocsWithUser = empRequirements
+          .filter(req => req.document && req.employee)
+          .map(req => ({
+            ...req.document,
+            user: {
+              id: req.employee.id,
+              first_name: req.employee.first_name,
+              last_name: req.employee.last_name,
+              email: req.employee.email,
+              department: req.employee.department,
+              phone: req.employee.phone
+            },
+            employee_id: req.employee.employee_id,
+            requirement_id: req.id,
+            requirement_priority: req.priority
+          }));
+
+        // Evitar duplicados
+        const existingIds = new Set(allExpiringDocs.map(doc => doc.id));
+        const newDocs = employeeDocsWithUser.filter(doc => !existingIds.has(doc.id));
+        allExpiringDocs = [...allExpiringDocs, ...newDocs];
+      }
+
+      // Enriquecer con información de vencimiento
+      const enrichedDocs = allExpiringDocs.map(doc => {
         const daysUntilExpiration = Math.ceil(
-          (new Date(doc.expiration_date) - new Date()) / (1000 * 60 * 60 * 24)
+          (new Date(doc.expiration_date) - today) / (1000 * 60 * 60 * 24)
         );
-        
+
+        let urgency = 'medium';
+        if (daysUntilExpiration <= 1) {
+          urgency = 'urgent';
+        } else if (daysUntilExpiration <= 7) {
+          urgency = 'high';
+        } else if (daysUntilExpiration <= 15) {
+          urgency = 'medium';
+        } else {
+          urgency = 'low';
+        }
+
         return {
           ...doc,
           days_until_expiration: daysUntilExpiration,
-          urgency: daysUntilExpiration <= 7 ? 'urgent' : daysUntilExpiration <= 15 ? 'high' : 'medium'
+          urgency: urgency,
+          user_name: doc.user ? `${doc.user.first_name} ${doc.user.last_name}` : 'Usuario desconocido'
         };
       });
+
+      // Ordenar por urgencia y fecha de vencimiento
+      enrichedDocs.sort((a, b) => {
+        const urgencyOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+        if (urgencyOrder[a.urgency] !== urgencyOrder[b.urgency]) {
+          return urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
+        }
+        return new Date(a.expiration_date) - new Date(b.expiration_date);
+      });
+
+      console.log(`✅ Devolviendo ${enrichedDocs.length} documentos por vencer`);
 
       return {
         success: true,
         documents: enrichedDocs,
-        total: enrichedDocs.length
+        total: enrichedDocs.length,
+        summary: {
+          urgent: enrichedDocs.filter(d => d.urgency === 'urgent').length,
+          high: enrichedDocs.filter(d => d.urgency === 'high').length,
+          medium: enrichedDocs.filter(d => d.urgency === 'medium').length,
+          low: enrichedDocs.filter(d => d.urgency === 'low').length
+        }
       };
 
     } catch (error) {

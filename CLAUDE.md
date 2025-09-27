@@ -8,12 +8,27 @@ Document management system for Guatemala's Ministry of Education (MINEDUC). Full
 
 ## Development Commands
 
+### Root Level (Workspace Commands)
+```bash
+npm run dev          # Start both frontend and backend concurrently
+npm run dev:frontend # Start only frontend dev server
+npm run dev:backend  # Start only backend dev server
+npm run build        # Build frontend for production
+npm run test         # Run tests for both frontend and backend
+npm run lint         # Run ESLint on frontend
+npm run install:all  # Install dependencies for all workspaces
+npm run clean        # Remove all node_modules directories
+```
+
 ### Backend (`backend/`)
 ```bash
 npm run dev          # Start development server with nodemon
-npm start            # Start production server  
+npm start            # Start production server
 npm test             # Run Jest tests
 npm run test:watch   # Run tests in watch mode
+npm run test:auth    # Test authentication flow (native)
+npm run test:auth-full # Test full authentication flow
+npm run test:basic   # Test basic functionality
 npm run build        # No build step required (outputs message)
 ```
 
@@ -35,16 +50,19 @@ npm start            # Alias for npm run preview
 - **Auth**: Supabase Auth + JWT middleware
 - **AI**: OpenAI API for classification, Tesseract.js for OCR
 - **Deployment**: Vercel (frontend), Render (backend)
+- **Package Manager**: pnpm (frontend), npm (backend)
+- **Testing**: Jest (backend), ESLint (frontend)
+- **Documentation**: Swagger/OpenAPI for API documentation
 
 ### Key Patterns
 
 **Authentication Flow**: Supabase Auth with custom JWT middleware. Protected routes use `ProtectedRoute` component. User roles: admin/editor/viewer with RLS policies.
 
-**Backend Structure**: Express with modular routes under `routes/`, business logic in `services/`, auth middleware. Most routes currently commented out in `server.js` (development in progress).
+**Backend Structure**: Express with modular routes under `routes/`, business logic in `services/`, auth middleware. Complete API with Swagger documentation at `/api-docs`. Health check endpoint at `/health`.
 
-**Frontend Structure**: Component-based with shadcn/ui, custom auth hook (`hooks/useAuth.jsx`), API layer (`lib/api.js`, `lib/supabase.js`), toast notifications.
+**Frontend Structure**: Component-based with shadcn/ui, custom auth hook (`hooks/useAuth.jsx`), API layer (`lib/api.js`, `lib/supabase.js`), toast notifications. Uses path aliases (`@` → `./src`). Located in `frontend/` directory.
 
-**Database**: UUID primary keys, comprehensive audit logging, document workflows, full-text search capabilities.
+**Database**: UUID primary keys, comprehensive audit logging, document workflows, full-text search capabilities. Complete schema in `database/schema.sql`. Additional employee management schemas available in `database/employee_management_schema.sql`.
 
 ## Environment Configuration
 
@@ -67,26 +85,37 @@ VITE_API_BASE_URL=http://localhost:5000
 ## Database Setup
 
 1. Execute `database/schema.sql` in Supabase SQL editor
-2. Run `database/seed.sql` for test data
+2. Run `database/seed.sql` for test data (after creating users in Supabase Auth)
 3. Configure Storage bucket named `documents`
+4. Apply user management migrations: `database/apply_user_management_migrations.sql`
+5. For employee management: `database/employee_management_schema.sql` and `database/employee_seed_data.sql`
 
 Test users: admin@mineduc.gob.gt, editor@mineduc.gob.gt, viewer@mineduc.gob.gt
 
 ## Key Configuration Files
 
-- `frontend/vite.config.js` - Vite config with path aliases (`@` → `./src`), React + Tailwind CSS plugins
+- `package.json` - Root workspace configuration with npm workspaces for frontend/backend
+- `frontend/package.json` - Frontend dependencies (React 19, Vite, Tailwind CSS v4, shadcn/ui)
+- `backend/package.json` - Backend dependencies (Express, Supabase, OpenAI, Tesseract.js)
+- `frontend/vite.config.js` - Vite config with path aliases (`@` → `./src`), React + Tailwind CSS plugins, optimized build chunks
 - `frontend/eslint.config.js` - ESLint config with React hooks rules and unused vars handling
-- `vercel.json` - Frontend deployment configuration
-- `backend/render.yaml` - Backend deployment configuration  
-- `backend/server.js` - Express server with Swagger API documentation setup
-- Health check available at `/health` endpoint
+- `vercel.json` - Frontend deployment configuration with CORS headers and rewrites
+- `backend/render.yaml` - Backend deployment configuration with environment variables
+- `backend/server.js` - Express server with Swagger API documentation setup and comprehensive middleware
+- Health check available at `/health` endpoint with database and storage status
 
 ## Development Notes
 
-- Frontend uses **pnpm** as package manager (see `packageManager` field)
-- Backend has comprehensive Swagger API documentation setup with JWT auth
+- **Workspace Structure**: Root package.json manages npm workspaces for frontend/backend
+- Frontend uses **pnpm** as package manager (see `packageManager` field in frontend/package.json)
+- Backend uses **npm** as package manager
+- Backend has comprehensive Swagger API documentation setup with JWT auth at `/api-docs`
 - ESLint configured to ignore unused variables starting with capital letters or underscores
 - Both dev servers run with `--host` flag for network access
+- Frontend build optimized with manual chunks for vendor libraries (React, UI, charts, forms, API, styling, utils)
+- Backend includes multiple test scripts for different scenarios (auth, basic functionality)
+- CORS configured for both development (localhost:5173, localhost:3000) and production URLs
+- Rate limiting implemented: 100 req/15min general, 30 req/15min auth routes
 
 ## Authentication & Security
 

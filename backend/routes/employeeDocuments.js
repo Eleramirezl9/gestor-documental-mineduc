@@ -75,19 +75,27 @@ router.post('/register', verifyToken, [
   body('first_name').notEmpty().withMessage('Nombre es requerido'),
   body('last_name').notEmpty().withMessage('Apellido es requerido'),
   body('department').notEmpty().withMessage('Departamento es requerido'),
-  body('phone').optional().isMobilePhone(),
+  body('hire_date').notEmpty().withMessage('Fecha de contratación es requerida'),
+  body('phone').optional().isString().trim(),
   body('required_documents').optional().isArray()
 ], async (req, res) => {
   try {
+    console.log('📝 Register employee request:', {
+      body: req.body,
+      user: req.user?.profile?.email,
+      role: req.user?.profile?.role
+    });
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
     // Solo administradores pueden registrar colaboradores
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        error: 'Acceso denegado. Se requieren permisos de administrador.' 
+    if (req.user.profile.role !== 'admin') {
+      return res.status(403).json({
+        error: 'Acceso denegado. Se requieren permisos de administrador.'
       });
     }
 
@@ -103,7 +111,7 @@ router.post('/register', verifyToken, [
       }));
     }
 
-    const result = await employeeDocumentService.registerEmployee(employeeData);
+    const result = await employeeDocumentService.registerEmployee(employeeData, req.user.id);
 
     if (result.success) {
       // Registrar en auditoría
@@ -121,6 +129,7 @@ router.post('/register', verifyToken, [
 
       res.status(201).json(result);
     } else {
+      console.log('❌ Service error:', result);
       res.status(400).json(result);
     }
 
@@ -170,6 +179,34 @@ router.post('/register', verifyToken, [
  *       200:
  *         description: Lista de colaboradores con estado de documentos
  */
+// Test endpoint without auth for development
+router.get('/employees/test', async (req, res) => {
+  try {
+    // Mock user for testing
+    req.user = { id: 'test-user', role: 'admin', email: 'admin@mineduc.gob.gt' };
+
+    const filters = {
+      department: req.query.department,
+      status: req.query.status,
+      expiring_soon: req.query.expiring_soon === 'true',
+      search: req.query.search,
+      limit: parseInt(req.query.limit) || 50,
+      offset: parseInt(req.query.offset) || 0
+    };
+
+    const result = await employeeDocumentService.getEmployeesWithDocumentStatus(filters);
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('Error en GET /employee-documents/employees/test:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 router.get('/employees', verifyToken, [
   query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
   query('offset').optional().isInt({ min: 0 }).toInt(),
@@ -223,6 +260,23 @@ router.get('/employees', verifyToken, [
  *       200:
  *         description: Lista de documentos próximos a vencer
  */
+// Test endpoint for expiring documents without auth
+router.get('/expiring/test', async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 30;
+    const result = await employeeDocumentService.getExpiringDocuments(days);
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('Error en GET /employee-documents/expiring/test:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 router.get('/expiring', verifyToken, [
   query('days').optional().isInt({ min: 1, max: 365 }).toInt()
 ], async (req, res) => {
@@ -342,9 +396,9 @@ router.put('/document/:id/status', verifyToken, [
 router.get('/report', verifyToken, async (req, res) => {
   try {
     // Solo administradores y editores pueden generar reportes
-    if (!['admin', 'editor'].includes(req.user.role)) {
-      return res.status(403).json({ 
-        error: 'Acceso denegado. Se requieren permisos de administrador o editor.' 
+    if (!['admin', 'editor'].includes(req.user.profile.role)) {
+      return res.status(403).json({
+        error: 'Acceso denegado. Se requieren permisos de administrador o editor.'
       });
     }
 
@@ -354,6 +408,7 @@ router.get('/report', verifyToken, async (req, res) => {
       date_to: req.query.date_to
     };
 
+    console.log('📊 Generando reporte con filtros:', filters);
     const result = await employeeDocumentService.generateDocumentStatusReport(filters);
 
     if (result.success) {
@@ -376,7 +431,8 @@ router.get('/report', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('Error en GET /employee-documents/report:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    console.error('Stack trace:', error.stack);
+    res.status(500).json({ error: 'Error interno del servidor', details: error.message });
   }
 });
 
@@ -395,9 +451,9 @@ router.get('/report', verifyToken, async (req, res) => {
 router.post('/process-notifications', verifyToken, async (req, res) => {
   try {
     // Solo administradores pueden ejecutar proceso de notificaciones
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        error: 'Acceso denegado. Se requieren permisos de administrador.' 
+    if (req.user.profile.role !== 'admin') {
+      return res.status(403).json({
+        error: 'Acceso denegado. Se requieren permisos de administrador.'
       });
     }
 
@@ -433,8 +489,9 @@ router.post('/process-notifications', verifyToken, async (req, res) => {
  */
 router.get('/departments', verifyToken, async (req, res) => {
   try {
+    // Obtener departamentos de empleados activos
     const { data: departments, error } = await supabase
-      .from('user_profiles')
+      .from('employees')
       .select('department')
       .not('department', 'is', null)
       .eq('is_active', true);
@@ -451,6 +508,281 @@ router.get('/departments', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('Error en GET /employee-documents/departments:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/employee-documents/employee/{id}:
+ *   get:
+ *     summary: Obtener detalles de un empleado específico
+ *     tags: [Employee Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Detalles del empleado con estado de documentos
+ *       404:
+ *         description: Empleado no encontrado
+ */
+router.get('/employee/:id', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await employeeDocumentService.getEmployeeWithDocumentStatus(id);
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(404).json(result);
+    }
+
+  } catch (error) {
+    console.error('Error en GET /employee-documents/employee/:id:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/employee-documents/employee/{id}/requirements:
+ *   post:
+ *     summary: Agregar nuevo requerimiento de documento a un empleado
+ *     tags: [Employee Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - document_type
+ *               - required_date
+ *             properties:
+ *               document_type:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               required_date:
+ *                 type: string
+ *                 format: date
+ *               priority:
+ *                 type: string
+ *                 enum: [low, medium, high, urgent]
+ *                 default: medium
+ *     responses:
+ *       201:
+ *         description: Requerimiento creado exitosamente
+ *       400:
+ *         description: Datos inválidos
+ */
+router.post('/employee/:id/requirements', verifyToken, [
+  body('document_type').notEmpty().withMessage('Tipo de documento es requerido'),
+  body('required_date').isISO8601().withMessage('Fecha requerida inválida'),
+  body('priority').optional().isIn(['low', 'medium', 'high', 'urgent'])
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    // Solo administradores y editores pueden agregar requerimientos
+    if (!['admin', 'editor'].includes(req.user.profile.role)) {
+      return res.status(403).json({
+        error: 'Acceso denegado. Se requieren permisos de administrador o editor.'
+      });
+    }
+
+    const { id: employeeId } = req.params;
+    const { document_type, description, required_date, priority = 'medium' } = req.body;
+
+    const { data: requirement, error } = await supabase
+      .from('employee_document_requirements')
+      .insert([{
+        employee_id: employeeId,
+        document_type,
+        description: description || `Documento ${document_type} requerido`,
+        required_date,
+        priority,
+        created_by: req.user.id
+      }])
+      .select(`
+        *,
+        employee:employees(first_name, last_name, email)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    // Registrar en auditoría
+    await auditService.log({
+      user_id: req.user.id,
+      action: 'add_document_requirement',
+      resource_type: 'employee_requirement',
+      resource_id: requirement.id,
+      details: {
+        employee_id: employeeId,
+        employee_name: requirement.employee ? `${requirement.employee.first_name} ${requirement.employee.last_name}` : 'Desconocido',
+        document_type,
+        required_date,
+        priority
+      }
+    });
+
+    res.status(201).json({
+      success: true,
+      requirement,
+      message: 'Requerimiento de documento agregado exitosamente'
+    });
+
+  } catch (error) {
+    console.error('Error en POST /employee-documents/employee/:id/requirements:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/employee-documents/stats:
+ *   get:
+ *     summary: Obtener estadísticas generales de empleados y documentos
+ *     tags: [Employee Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Estadísticas generales
+ */
+router.get('/stats', verifyToken, async (req, res) => {
+  try {
+    // Obtener estadísticas básicas
+    const [employeesResult, expiringResult] = await Promise.all([
+      employeeDocumentService.getEmployeesWithDocumentStatus({ limit: 1000 }),
+      employeeDocumentService.getExpiringDocuments(30)
+    ]);
+
+    if (!employeesResult.success || !expiringResult.success) {
+      throw new Error('Error obteniendo datos para estadísticas');
+    }
+
+    const employees = employeesResult.employees;
+    const expiringDocs = expiringResult.documents;
+
+    // Calcular estadísticas
+    const stats = {
+      employees: {
+        total: employees.length,
+        by_status: {
+          critical: employees.filter(e => e.overall_status === 'critical').length,
+          attention: employees.filter(e => e.overall_status === 'attention').length,
+          normal: employees.filter(e => e.overall_status === 'normal').length,
+          complete: employees.filter(e => e.overall_status === 'complete').length
+        },
+        by_department: {}
+      },
+      documents: {
+        expiring_soon: expiringDocs.length,
+        by_urgency: expiringResult.summary || {
+          urgent: 0,
+          high: 0,
+          medium: 0,
+          low: 0
+        }
+      },
+      requirements: {
+        total: employees.reduce((sum, e) => sum + (e.requirement_status?.total || 0), 0),
+        pending: employees.reduce((sum, e) => sum + (e.requirement_status?.pending || 0), 0),
+        overdue: employees.reduce((sum, e) => sum + (e.requirement_status?.overdue || 0), 0),
+        completed: employees.reduce((sum, e) => sum + (e.requirement_status?.completed || 0), 0)
+      }
+    };
+
+    // Agrupar por departamento
+    employees.forEach(emp => {
+      if (emp.department) {
+        if (!stats.employees.by_department[emp.department]) {
+          stats.employees.by_department[emp.department] = {
+            total: 0,
+            critical: 0,
+            attention: 0,
+            normal: 0,
+            complete: 0
+          };
+        }
+        stats.employees.by_department[emp.department].total++;
+        stats.employees.by_department[emp.department][emp.overall_status]++;
+      }
+    });
+
+    res.json({
+      success: true,
+      stats,
+      generated_at: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Error en GET /employee-documents/stats:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/employee-documents/next-id:
+ *   get:
+ *     summary: Obtener próximo ID de empleado disponible
+ *     tags: [Employee Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Próximo ID disponible
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 employee_id:
+ *                   type: string
+ *                   example: "MIN25001"
+ *                 message:
+ *                   type: string
+ */
+router.get('/next-id', verifyToken, async (req, res) => {
+  try {
+    console.log('🆔 Solicitando próximo employee_id...');
+
+    const nextId = await employeeDocumentService.getNextEmployeeId();
+
+    res.json({
+      success: true,
+      employee_id: nextId,
+      message: `Próximo ID disponible: ${nextId}`
+    });
+
+  } catch (error) {
+    console.error('Error en GET /employee-documents/next-id:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor',
+      message: 'No se pudo generar el próximo ID de empleado'
+    });
   }
 });
 

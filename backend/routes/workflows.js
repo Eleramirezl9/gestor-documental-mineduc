@@ -4,6 +4,7 @@ const { supabase } = require('../config/supabase');
 const { verifyToken, requireRole } = require('../middleware/auth');
 const auditService = require('../services/auditService');
 const notificationService = require('../services/notificationService');
+const { statsCache } = require('../middleware/cache');
 
 const router = express.Router();
 
@@ -1034,7 +1035,7 @@ router.post('/:id/cancel', verifyToken, [
  *       500:
  *         description: Error interno del servidor
  */
-router.get('/stats/overview', verifyToken, async (req, res) => {
+router.get('/stats/overview', verifyToken, statsCache, async (req, res) => {
   try {
     console.log('📊 Fetching workflow stats for user:', req.user?.profile?.role);
     

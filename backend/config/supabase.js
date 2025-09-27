@@ -8,49 +8,62 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
   console.error("❌ Error crítico: Supabase environment variables are not set.");
   console.error("Variables requeridas: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY");
-  
+  console.error("📋 Por favor, configura tu archivo .env con las credenciales de Supabase");
+
   if (process.env.NODE_ENV === 'production') {
     process.exit(1); // Fallar inmediatamente en producción
   }
+
+  // En desarrollo, usar valores dummy para evitar crashes
+  console.warn("⚠️  Usando configuración dummy en desarrollo - Supabase no funcionará");
 }
 
-// Cliente para operaciones de autenticación (usa anon key)
-const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-    detectSessionInUrl: false
-  },
-  db: {
-    schema: 'public'
-  }
-});
+// Crear clientes solo si las variables están configuradas
+let supabase = null;
+let supabaseAdmin = null;
 
-// Cliente administrativo para operaciones de backend (usa service role)
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-    detectSessionInUrl: false
-  },
-  db: {
-    schema: 'public'
-  }
-});
+if (supabaseUrl && supabaseAnonKey && supabaseServiceRoleKey) {
+  // Cliente para operaciones de autenticación (usa anon key)
+  supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false
+    },
+    db: {
+      schema: 'public'
+    }
+  });
+
+  // Cliente administrativo para operaciones de backend (usa service role)
+  supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false
+    },
+    db: {
+      schema: 'public'
+    }
+  });
+} else {
+  console.warn("⚠️  Clientes Supabase no inicializados - configura las variables de entorno");
+}
 
 // Función helper para verificar conexión a Supabase
 const testConnection = async () => {
   try {
+    // Usar user_quotas que sí existe según el error
     const { data, error } = await supabaseAdmin
-      .from('user_profiles')
-      .select('count')
+      .from('user_quotas')
+      .select('id')
       .limit(1);
-    
+
     if (error) {
       console.error('❌ Error conectando a Supabase:', error.message);
       return false;
     }
-    
+
     console.log('✅ Conexión a Supabase establecida correctamente');
     return true;
   } catch (error) {

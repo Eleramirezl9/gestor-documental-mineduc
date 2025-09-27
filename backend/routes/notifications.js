@@ -3,6 +3,7 @@ const { body, validationResult, query } = require('express-validator');
 const { supabase } = require('../config/supabase');
 const { verifyToken } = require('../middleware/auth');
 const auditService = require('../services/auditService');
+const { notificationCache, statsCache } = require('../middleware/cache');
 
 const router = express.Router();
 
@@ -211,7 +212,7 @@ router.get('/', verifyToken, [
  *       500:
  *         description: Error interno del servidor
  */
-router.get('/unread-count', verifyToken, async (req, res) => {
+router.get('/unread-count', verifyToken, notificationCache, async (req, res) => {
   try {
     const { count } = await supabase
       .from('notifications')

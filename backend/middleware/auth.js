@@ -62,31 +62,27 @@ const verifyToken = async (req, res, next) => {
       });
     }
 
-    // Obtener información adicional del usuario desde la base de datos usando supabaseAdmin
-    const { data: userProfile, error: profileError } = await require('../config/supabase').supabaseAdmin
-      .from('user_profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError) {
-      console.error('Error obteniendo perfil de usuario:', profileError);
-      // Crear perfil por defecto si no existe
-      const defaultProfile = {
-        id: user.id,
-        email: user.email,
-        first_name: user.user_metadata?.first_name || 'Usuario',
-        last_name: user.user_metadata?.last_name || 'Prueba',
-        role: 'viewer',
-        is_active: true
-      };
-      
-      req.user = {
-        ...user,
-        profile: defaultProfile
-      };
-      return next();
+    // Determinar el rol basado en el email (mismo patrón que el frontend)
+    let role = 'viewer';
+    if (user.email === 'admin@mineduc.gob.gt') {
+      role = 'admin';
+    } else if (user.email === 'editor@mineduc.gob.gt') {
+      role = 'editor';
     }
+
+    // Crear perfil por defecto usando información de Supabase
+    const userProfile = {
+      id: user.id,
+      email: user.email,
+      first_name: user.user_metadata?.first_name || 'Usuario',
+      last_name: user.user_metadata?.last_name || 'MINEDUC',
+      role: role,
+      is_active: true,
+      department: role === 'admin' ? 'TI' : 'General',
+      position: role === 'admin' ? 'Administrador' : 'Usuario',
+      employee_id: role === 'admin' ? 'MIN25001' : `MIN${Date.now().toString().slice(-5)}`,
+      phone: '+502 2411-9595'
+    };
 
     req.user = {
       ...user,
@@ -125,15 +121,26 @@ const optionalAuth = async (req, res, next) => {
       const { data: { user }, error } = await supabase.auth.getUser(token);
       
       if (!error && user) {
-        const { data: userProfile } = await require('../config/supabase').supabaseAdmin
-          .from('user_profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-          
-        if (userProfile) {
-          req.user = { ...user, profile: userProfile };
+        // Determinar el rol basado en el email
+        let role = 'viewer';
+        if (user.email === 'admin@mineduc.gob.gt') {
+          role = 'admin';
+        } else if (user.email === 'editor@mineduc.gob.gt') {
+          role = 'editor';
         }
+
+        const userProfile = {
+          id: user.id,
+          email: user.email,
+          first_name: user.user_metadata?.first_name || 'Usuario',
+          last_name: user.user_metadata?.last_name || 'MINEDUC',
+          role: role,
+          is_active: true,
+          department: role === 'admin' ? 'TI' : 'General',
+          position: role === 'admin' ? 'Administrador' : 'Usuario'
+        };
+
+        req.user = { ...user, profile: userProfile };
       }
     }
     

@@ -150,51 +150,41 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// CORS manual - aplicar headers ANTES que cualquier otra cosa
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  console.log(`🌐 ${req.method} ${req.path} from origin: ${origin || 'no-origin'}`);
-  
-  // Establecer headers CORS manualmente
-  res.header('Access-Control-Allow-Origin', origin || '*');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
-  res.header('Access-Control-Allow-Headers', 'Origin,X-Requested-With,Content-Type,Accept,Authorization,Cache-Control');
-  res.header('Access-Control-Max-Age', '86400');
-  
-  // Responder a OPTIONS requests inmediatamente
-  if (req.method === 'OPTIONS') {
-    console.log('🔄 OPTIONS preflight request handled');
-    return res.status(200).end();
-  }
-  
-  next();
-});
-
-app.use(generalLimiter);
-app.use('/api/auth', authLimiter);
-
-// CORS adicional con librería como respaldo
-app.use(cors({
-  origin: true,
+// CORS configuration - simplified and optimized
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production'
+    ? [process.env.FRONTEND_URL, 'https://gestor-documental-mineduc.vercel.app']
+    : ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'Cache-Control'],
-  optionsSuccessStatus: 200
-}));
+  allowedHeaders: [
+    'Origin',
+    'X-Requested-With',
+    'Content-Type',
+    'Accept',
+    'Authorization',
+    'Cache-Control'
+  ],
+  optionsSuccessStatus: 200,
+  maxAge: 86400 // 24 hours
+};
+
+app.use(cors(corsOptions));
+app.use(generalLimiter);
+app.use('/api/auth', authLimiter);
 
 // Logging
 app.use(morgan("combined"));
 
-// Parseo de JSON con límites de seguridad
-app.use(express.json({ 
-  limit: process.env.MAX_FILE_SIZE || "50mb",
+// Body parsing with optimized limits
+app.use(express.json({
+  limit: process.env.MAX_JSON_SIZE || "10mb",
   type: 'application/json'
 }));
-app.use(express.urlencoded({ 
-  extended: true, 
-  limit: process.env.MAX_FILE_SIZE || "50mb",
-  parameterLimit: 1000
+app.use(express.urlencoded({
+  extended: true,
+  limit: process.env.MAX_JSON_SIZE || "10mb",
+  parameterLimit: 100
 }));
 
 // Swagger UI
@@ -267,6 +257,8 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 // Rutas principales
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/users", require("./routes/users"));
+app.use("/api/users-enhanced", require("./routes/users_enhanced"));
+app.use("/api/invitations", require("./routes/invitations"));
 app.use("/api/documents", require("./routes/documents"));
 app.use("/api/workflows", require("./routes/workflows"));
 app.use("/api/notifications", require("./routes/notifications"));

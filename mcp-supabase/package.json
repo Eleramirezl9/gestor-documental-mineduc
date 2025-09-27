@@ -1,0 +1,25 @@
+{
+  "name": "mcp-supabase",
+  "version": "1.0.0",
+  "description": "MCP server for Supabase database operations with full CRUD capabilities",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^17.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "supabase",
+    "database",
+    "postgresql"
+  ]
+}
