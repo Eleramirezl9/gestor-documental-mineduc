@@ -9,9 +9,7 @@ import './App.css'
 // Lazy loading de páginas
 const Login = lazy(() => import('./pages/Login'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
-const Documents = lazy(() => import('./pages/Documents'))
 const Users = lazy(() => import('./pages/Users'))
-const UsersEnhanced = lazy(() => import('./pages/UsersEnhanced'))
 const Reports = lazy(() => import('./pages/Reports'))
 const Audit = lazy(() => import('./pages/Audit'))
 const Settings = lazy(() => import('./pages/Settings'))
@@ -85,19 +83,9 @@ function App() {
                   <Dashboard />
                 </Suspense>
               } />
-              <Route path="documents" element={
-                <Suspense fallback={<PageLoader />}>
-                  <Documents />
-                </Suspense>
-              } />
               <Route path="users" element={
                 <Suspense fallback={<PageLoader />}>
                   <Users />
-                </Suspense>
-              } />
-              <Route path="user-management" element={
-                <Suspense fallback={<PageLoader />}>
-                  <UsersEnhanced />
                 </Suspense>
               } />
               <Route path="reports" element={

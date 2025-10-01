@@ -41,9 +41,7 @@ const Layout = () => {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
-    { name: 'Documentos', href: '/documents', icon: FileText },
     { name: 'Usuarios', href: '/users', icon: Users },
-    { name: 'Gestión de Usuarios', href: '/user-management', icon: Shield, adminOnly: true },
     { name: 'Empleados', href: '/employees', icon: UserCheck, adminOnly: true },
     { name: 'Historial de Actividad', href: '/activity-history', icon: Activity },
     { name: 'Notificaciones', href: '/notifications', icon: Bell },
