@@ -14,6 +14,16 @@ import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '../components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../components/ui/alert-dialog';
+import {
   Plus,
   Search,
   Users,
@@ -44,7 +54,9 @@ import {
   Minus,
   Save,
   Check,
-  MessageSquare
+  MessageSquare,
+  Trash2,
+  Edit
 } from 'lucide-react';
 
 const EmployeeManagement = () => {
@@ -56,6 +68,25 @@ const EmployeeManagement = () => {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showEmployeeProfile, setShowEmployeeProfile] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState('resumen');
+
+  // Estado para confirmación de eliminación de empleado
+  const [deleteDialog, setDeleteDialog] = useState({
+    open: false,
+    employeeId: null,
+    employeeName: ''
+  });
+
+  // Estados para edición/eliminación de documentos requeridos
+  const [editDocumentDialog, setEditDocumentDialog] = useState({
+    open: false,
+    document: null
+  });
+
+  const [deleteDocumentDialog, setDeleteDocumentDialog] = useState({
+    open: false,
+    documentId: null,
+    documentName: ''
+  });
 
   // Estados para asignación de documentos requeridos
   const [showDocumentsModal, setShowDocumentsModal] = useState(false);
@@ -991,6 +1022,78 @@ const EmployeeManagement = () => {
     return `${renewalPeriod} ${unitText}`;
   };
 
+  // Función para eliminar empleado
+  const handleDeleteEmployee = async (employeeId) => {
+    try {
+      setLoading(true);
+
+      // TODO: Descomentar cuando esté lista la API
+      // await employeesAPI.deleteEmployee(employeeId);
+
+      // Simulación de eliminación (remover cuando la API esté lista)
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      toast.success('Empleado eliminado correctamente');
+
+      // Cerrar modal de perfil
+      setShowEmployeeProfile(false);
+      setSelectedEmployee(null);
+
+      // Actualizar lista de empleados (remover el eliminado)
+      setEmployees(prev => prev.filter(emp => emp.id !== employeeId));
+
+    } catch (error) {
+      console.error('Error al eliminar empleado:', error);
+      toast.error('Error al eliminar empleado');
+    } finally {
+      setLoading(false);
+      setDeleteDialog({ open: false, employeeId: null, employeeName: '' });
+    }
+  };
+
+  // Función para editar documento requerido
+  const handleEditDocument = (document) => {
+    setEditDocumentDialog({ open: true, document });
+  };
+
+  // Función para eliminar documento requerido
+  const handleDeleteDocument = async (documentId) => {
+    try {
+      setLoading(true);
+
+      // TODO: Descomentar cuando esté lista la API
+      // await employeesAPI.deleteRequiredDocument(documentId);
+
+      // Simulación (remover cuando la API esté lista)
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      // Actualizar lista local
+      setAssignedDocuments(prev => prev.filter(doc => doc.id !== documentId));
+
+      toast.success('Documento requerido eliminado correctamente');
+
+    } catch (error) {
+      console.error('Error al eliminar documento:', error);
+      toast.error('Error al eliminar documento requerido');
+    } finally {
+      setLoading(false);
+      setDeleteDocumentDialog({
+        open: false,
+        documentId: null,
+        documentName: ''
+      });
+    }
+  };
+
+  // Función para actualizar/resubir documento
+  const handleUpdateDocument = (documentId) => {
+    // Trigger file input para resubir
+    const fileInput = document.getElementById(`file-upload-${documentId}`);
+    if (fileInput) {
+      fileInput.click();
+    }
+  };
+
   // Componente del perfil del empleado con pestañas
   const EmployeeProfileModal = () => {
     if (!selectedEmployee) return null;
@@ -1000,134 +1103,209 @@ const EmployeeManagement = () => {
       return new Date(dateString).toLocaleDateString('es-GT');
     };
 
-    // Datos simulados para documentos y actividades
-    const documentStats = {
-      completos: 3,
-      pendientes: 1,
-      vencidos: 1
+    // Función para generar documentos específicos del empleado seleccionado
+    const getEmployeeDocuments = () => {
+      const employeeName = `${selectedEmployee.first_name} ${selectedEmployee.last_name}`;
+      const employeeId = selectedEmployee.employee_id;
+
+      // Diferentes configuraciones de documentos según el empleado
+      const documentConfigs = {
+        'EMP-001': [ // Juan Pérez
+          {
+            id: 1,
+            name: 'Contrato de Trabajo',
+            status: 'Completo',
+            uploadDate: '2024-01-15',
+            type: 'PDF',
+            uploadedBy: employeeName,
+            approvalStatus: 'aprobado',
+            comments: [{ user: 'Admin', text: 'Documento correcto y completo' }]
+          },
+          {
+            id: 2,
+            name: 'DPI Escaneado',
+            status: 'Completo',
+            uploadDate: '2024-01-14',
+            type: 'PDF',
+            uploadedBy: employeeName,
+            approvalStatus: 'aprobado',
+            comments: [{ user: 'RH', text: 'DPI verificado correctamente' }]
+          },
+          {
+            id: 3,
+            name: 'Certificado Médico',
+            status: 'Completo',
+            uploadDate: '2024-01-20',
+            type: 'PDF',
+            uploadedBy: employeeName,
+            approvalStatus: 'aprobado',
+            comments: [{ user: 'Dr. Ramírez', text: 'Certificado vigente hasta 2025' }]
+          },
+          {
+            id: 4,
+            name: 'Título Universitario',
+            status: 'Completo',
+            uploadDate: '2024-01-18',
+            type: 'PDF',
+            uploadedBy: employeeName,
+            approvalStatus: 'aprobado',
+            comments: []
+          }
+        ],
+        'default': [ // Otros empleados
+          {
+            id: 1,
+            name: 'Contrato de Trabajo',
+            status: 'Pendiente',
+            uploadDate: null,
+            type: 'PDF',
+            uploadedBy: null,
+            approvalStatus: 'pendiente',
+            comments: []
+          },
+          {
+            id: 2,
+            name: 'DPI Escaneado',
+            status: 'Completo',
+            uploadDate: '2024-01-15',
+            type: 'PDF',
+            uploadedBy: employeeName,
+            approvalStatus: 'pendiente',
+            comments: [{ user: 'RH', text: 'Pendiente de revisión' }]
+          },
+          {
+            id: 3,
+            name: 'Certificado Médico',
+            status: 'Pendiente',
+            uploadDate: null,
+            type: 'PDF',
+            uploadedBy: null,
+            approvalStatus: 'pendiente',
+            comments: []
+          },
+          {
+            id: 4,
+            name: 'Título Universitario',
+            status: 'Pendiente',
+            uploadDate: null,
+            type: 'PDF',
+            uploadedBy: null,
+            approvalStatus: 'pendiente',
+            comments: []
+          },
+          {
+            id: 5,
+            name: 'Antecedentes Penales',
+            status: 'Vencido',
+            uploadDate: '2023-12-01',
+            type: 'PDF',
+            uploadedBy: 'Sistema',
+            approvalStatus: 'rechazado',
+            comments: [{ user: 'Admin', text: 'Documento vencido, favor actualizar antes del 30/01/2025' }]
+          }
+        ]
+      };
+
+      return documentConfigs[employeeId] || documentConfigs['default'];
     };
 
-    const documents = [
-      {
-        id: 1,
-        name: 'Contrato de Trabajo',
-        status: 'Completo',
-        uploadDate: '2024-01-15',
-        type: 'PDF',
-        uploadedBy: 'Juan Pérez',
-        approvalStatus: 'aprobado',
-        comments: [{ user: 'Admin', text: 'Documento correcto y completo' }]
-      },
-      {
-        id: 2,
-        name: 'DPI Escaneado',
-        status: 'Completo',
-        uploadDate: '2024-01-15',
-        type: 'PDF',
-        uploadedBy: 'María González',
-        approvalStatus: 'pendiente',
-        comments: []
-      },
-      {
-        id: 3,
-        name: 'Certificado Médico',
-        status: 'Completo',
-        uploadDate: '2024-01-20',
-        type: 'PDF',
-        uploadedBy: 'Ana López',
-        approvalStatus: 'pendiente',
-        comments: [
-          { user: 'RH', text: 'Revisar fecha de vencimiento' },
-          { user: 'Dr. Ramírez', text: 'Certificado vigente hasta 2025' }
-        ]
-      },
-      {
-        id: 4,
-        name: 'Título Universitario',
-        status: 'Pendiente',
-        uploadDate: null,
-        type: 'PDF',
-        uploadedBy: null,
-        approvalStatus: 'pendiente',
-        comments: []
-      },
-      {
-        id: 5,
-        name: 'Antecedentes Penales',
-        status: 'Vencido',
-        uploadDate: '2023-12-01',
-        type: 'PDF',
-        uploadedBy: 'Sistema',
-        approvalStatus: 'rechazado',
-        comments: [{ user: 'Admin', text: 'Documento vencido, favor actualizar antes del 30/01/2025' }]
-      }
-    ];
+    // Función para generar actividades específicas del empleado
+    const getEmployeeActivities = () => {
+      const employeeName = `${selectedEmployee.first_name} ${selectedEmployee.last_name}`;
+      const employeeId = selectedEmployee.employee_id;
 
-    const activities = [
-      {
-        id: 1,
-        action: 'Documento aprobado',
-        detail: 'Contrato de Trabajo',
-        date: '2024-01-22 03:45 PM',
-        type: 'approval',
-        user: 'Admin Principal',
-        category: 'Aprobación'
-      },
-      {
-        id: 2,
-        action: 'Subió documento',
-        detail: 'Certificado Médico',
-        date: '2024-01-20 10:30 AM',
-        type: 'upload',
-        user: 'Ana López',
-        category: 'Documento'
-      },
-      {
-        id: 3,
-        action: 'Comentario agregado',
-        detail: 'Revisar fecha de vencimiento del certificado',
-        date: '2024-01-20 11:15 AM',
-        type: 'comment',
-        user: 'RH Supervisor',
-        category: 'Revisión'
-      },
-      {
-        id: 4,
-        action: 'Subió documento',
-        detail: 'DPI Escaneado',
-        date: '2024-01-15 02:15 PM',
-        type: 'upload',
-        user: 'María González',
-        category: 'Documento'
-      },
-      {
-        id: 5,
-        action: 'Documento rechazado',
-        detail: 'Antecedentes Penales (documento vencido)',
-        date: '2024-01-16 09:20 AM',
-        type: 'rejection',
-        user: 'Admin Principal',
-        category: 'Rechazo'
-      },
-      {
-        id: 6,
-        action: 'Perfil actualizado',
-        detail: 'Información de contacto modificada',
-        date: '2024-01-15 09:00 AM',
-        type: 'edit',
-        user: 'Sistema',
-        category: 'Sistema'
-      },
-      {
-        id: 7,
-        action: 'Perfil creado',
-        detail: 'Cuenta de empleado activada',
-        date: '2024-01-15 08:30 AM',
-        type: 'system',
-        user: 'Sistema',
-        category: 'Sistema'
-      }
-    ];
+      const activityConfigs = {
+        'EMP-001': [
+          {
+            id: 1,
+            action: 'Documento aprobado',
+            detail: 'Contrato de Trabajo',
+            date: '2024-01-22 03:45 PM',
+            type: 'approval',
+            user: 'Admin Principal',
+            category: 'Aprobación'
+          },
+          {
+            id: 2,
+            action: 'Subió documento',
+            detail: 'Certificado Médico',
+            date: '2024-01-20 10:30 AM',
+            type: 'upload',
+            user: employeeName,
+            category: 'Documento'
+          },
+          {
+            id: 3,
+            action: 'Documento aprobado',
+            detail: 'Título Universitario',
+            date: '2024-01-18 02:15 PM',
+            type: 'approval',
+            user: 'Admin Principal',
+            category: 'Aprobación'
+          },
+          {
+            id: 4,
+            action: 'Subió documento',
+            detail: 'DPI Escaneado',
+            date: '2024-01-14 09:00 AM',
+            type: 'upload',
+            user: employeeName,
+            category: 'Documento'
+          },
+          {
+            id: 5,
+            action: 'Perfil creado',
+            detail: 'Cuenta de empleado activada',
+            date: '2024-01-10 08:30 AM',
+            type: 'system',
+            user: 'Sistema',
+            category: 'Sistema'
+          }
+        ],
+        'default': [
+          {
+            id: 1,
+            action: 'Subió documento',
+            detail: 'DPI Escaneado',
+            date: '2024-01-15 02:15 PM',
+            type: 'upload',
+            user: employeeName,
+            category: 'Documento'
+          },
+          {
+            id: 2,
+            action: 'Documento rechazado',
+            detail: 'Antecedentes Penales (documento vencido)',
+            date: '2024-01-16 09:20 AM',
+            type: 'rejection',
+            user: 'Admin Principal',
+            category: 'Rechazo'
+          },
+          {
+            id: 3,
+            action: 'Perfil creado',
+            detail: 'Cuenta de empleado activada',
+            date: '2024-01-15 08:30 AM',
+            type: 'system',
+            user: 'Sistema',
+            category: 'Sistema'
+          }
+        ]
+      };
+
+      return activityConfigs[employeeId] || activityConfigs['default'];
+    };
+
+    // Obtener documentos y actividades específicos del empleado
+    const documents = getEmployeeDocuments();
+    const activities = getEmployeeActivities();
+
+    // Calcular estadísticas reales basadas en los documentos del empleado
+    const documentStats = {
+      completos: documents.filter(d => d.status === 'Completo').length,
+      pendientes: documents.filter(d => d.status === 'Pendiente').length,
+      vencidos: documents.filter(d => d.status === 'Vencido').length
+    };
 
     const getStatusIcon = (status) => {
       switch (status) {
@@ -1613,6 +1791,34 @@ const EmployeeManagement = () => {
                 {selectedEmployee.email}
               </p>
             </div>
+
+            {/* Botones de acción */}
+            <div className="ml-auto flex gap-2">
+              {/* Botón Editar */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                <Edit className="h-4 w-4" />
+                <span className="hidden sm:inline">Editar</span>
+              </Button>
+
+              {/* Botón Eliminar */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleteDialog({
+                  open: true,
+                  employeeId: selectedEmployee.id,
+                  employeeName: `${selectedEmployee.first_name} ${selectedEmployee.last_name}`
+                })}
+                className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-800"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Eliminar</span>
+              </Button>
+            </div>
           </div>
 
           {/* Pestañas - Diseño mejorado */}
@@ -2097,6 +2303,57 @@ const EmployeeManagement = () => {
       {/* Modal del perfil del empleado */}
       <EmployeeProfileModal />
 
+      {/* Diálogo de confirmación de eliminación */}
+      <AlertDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => !open && setDeleteDialog({
+          open: false,
+          employeeId: null,
+          employeeName: ''
+        })}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              ¿Eliminar empleado?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-left pt-2">
+              Estás a punto de eliminar al empleado{' '}
+              <strong className="text-gray-900 dark:text-white">
+                {deleteDialog.employeeName}
+              </strong>
+              .
+              <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  ⚠️ Esta acción eliminará:
+                </p>
+                <ul className="mt-2 text-sm text-amber-700 dark:text-amber-300 space-y-1 list-disc list-inside">
+                  <li>Información del empleado</li>
+                  <li>Documentos asociados</li>
+                  <li>Historial de actividad</li>
+                </ul>
+              </div>
+              <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+                Esta acción no se puede deshacer.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel className="mt-0">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleDeleteEmployee(deleteDialog.employeeId)}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Eliminar empleado
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Modal de Subir Documento */}
       {showUploadDocumentModal && (
         <Dialog
@@ -2450,12 +2707,55 @@ const EmployeeManagement = () => {
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
+                              {/* Badge de estado */}
                               <Badge
                                 variant={assignment.uploadStatus === 'subido' ? 'default' : isOverdue ? 'destructive' : 'secondary'}
                                 className="text-xs"
                               >
                                 {assignment.uploadStatus === 'subido' ? 'Subido' : isOverdue ? 'Vencido' : 'Pendiente'}
                               </Badge>
+
+                              {/* Botones de acción */}
+                              <div className="flex gap-1 ml-2">
+                                {/* Botón Actualizar/Resubir - solo si ya está subido */}
+                                {assignment.uploadStatus === 'subido' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleUpdateDocument(assignment.id)}
+                                    className="h-8 w-8 p-0 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                    title="Actualizar documento"
+                                  >
+                                    <Upload className="h-4 w-4 text-blue-600" />
+                                  </Button>
+                                )}
+
+                                {/* Botón Editar */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditDocument(assignment)}
+                                  className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                  title="Editar requisitos"
+                                >
+                                  <Edit className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                </Button>
+
+                                {/* Botón Eliminar */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setDeleteDocumentDialog({
+                                    open: true,
+                                    documentId: assignment.id,
+                                    documentName: document?.name || 'Documento'
+                                  })}
+                                  className="h-8 w-8 p-0 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                  title="Eliminar documento"
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              </div>
                             </div>
                           </div>
 
@@ -2876,6 +3176,155 @@ const EmployeeManagement = () => {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* AlertDialog de confirmación de eliminación de documento requerido */}
+      <AlertDialog
+        open={deleteDocumentDialog.open}
+        onOpenChange={(open) => !open && setDeleteDocumentDialog({
+          open: false,
+          documentId: null,
+          documentName: ''
+        })}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              ¿Eliminar documento requerido?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-left pt-2">
+              Estás a punto de eliminar el requisito{' '}
+              <strong className="text-gray-900 dark:text-white">
+                {deleteDocumentDialog.documentName}
+              </strong>{' '}
+              de este empleado.
+
+              <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  ⚠️ Esta acción:
+                </p>
+                <ul className="mt-2 text-sm text-amber-700 dark:text-amber-300 space-y-1 list-disc list-inside">
+                  <li>Eliminará el requisito del empleado</li>
+                  <li>Borrará el archivo si fue subido</li>
+                  <li>No afectará la plantilla original</li>
+                </ul>
+              </div>
+
+              <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+                Esta acción no se puede deshacer.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel className="mt-0">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleDeleteDocument(deleteDocumentDialog.documentId)}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Eliminar requisito
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de edición de documento requerido */}
+      <Dialog
+        open={editDocumentDialog.open}
+        onOpenChange={(open) => !open && setEditDocumentDialog({ open: false, document: null })}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="h-5 w-5 text-blue-600" />
+              Editar Requisito de Documento
+            </DialogTitle>
+            <DialogDescription>
+              Modifica la fecha de vencimiento y prioridad del documento requerido.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editDocumentDialog.document && (
+            <div className="space-y-4 py-4">
+              {/* Nombre del documento (solo lectura) */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Documento
+                </Label>
+                <Input
+                  value={allAvailableDocuments.find(d => d.id === editDocumentDialog.document.documentId)?.name || 'Documento'}
+                  disabled
+                  className="mt-1 bg-gray-50 dark:bg-gray-800"
+                />
+              </div>
+
+              {/* Fecha de vencimiento */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Fecha de Vencimiento
+                </Label>
+                <Input
+                  type="date"
+                  defaultValue={new Date(editDocumentDialog.document.dueDate).toISOString().split('T')[0]}
+                  className="mt-1"
+                  id="edit-due-date"
+                />
+              </div>
+
+              {/* Prioridad */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Prioridad
+                </Label>
+                <select
+                  className="w-full mt-1 p-2 border rounded-md bg-white dark:bg-gray-800 dark:border-gray-600"
+                  defaultValue={editDocumentDialog.document.priority || 'normal'}
+                  id="edit-priority"
+                >
+                  <option value="normal">Normal</option>
+                  <option value="alta">Alta</option>
+                  <option value="urgente">Urgente</option>
+                </select>
+              </div>
+
+              {/* Notas (opcional) */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Notas (Opcional)
+                </Label>
+                <textarea
+                  className="w-full mt-1 p-2 border rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 min-h-[80px]"
+                  placeholder="Agregar notas sobre este requisito..."
+                  id="edit-notes"
+                />
+              </div>
+
+              {/* Botones */}
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => setEditDocumentDialog({ open: false, document: null })}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={() => {
+                    // TODO: Implementar actualización con API
+                    toast.success('Documento actualizado correctamente');
+                    setEditDocumentDialog({ open: false, document: null });
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Guardar Cambios
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Modal para Crear Nuevo Tipo de Documento */}
       {showNewDocumentModal && (

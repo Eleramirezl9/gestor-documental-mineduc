@@ -18,6 +18,7 @@ const Settings = lazy(() => import('./pages/Settings'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const NotificationAutomation = lazy(() => import('./pages/NotificationAutomation'))
 const EmployeeManagement = lazy(() => import('./pages/EmployeeManagement'))
+const ActivityHistory = lazy(() => import('./pages/ActivityHistory'))
 
 // Componente de loading para lazy loading
 const PageLoader = () => (
@@ -122,6 +123,11 @@ function App() {
               <Route path="employees" element={
                 <Suspense fallback={<PageLoader />}>
                   <EmployeeManagement />
+                </Suspense>
+              } />
+              <Route path="activity-history" element={
+                <Suspense fallback={<PageLoader />}>
+                  <ActivityHistory />
                 </Suspense>
               } />
               <Route path="settings" element={

@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
-import { 
-  FileText, 
-  Users, 
-  Settings, 
-  BarChart3, 
-  Bell, 
+import {
+  FileText,
+  Users,
+  Settings,
+  BarChart3,
+  Bell,
   Search,
   Menu,
   X,
@@ -14,7 +14,8 @@ import {
   Shield,
   Home,
   Bot,
-  UserCheck
+  UserCheck,
+  Activity
 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -44,6 +45,7 @@ const Layout = () => {
     { name: 'Usuarios', href: '/users', icon: Users },
     { name: 'Gestión de Usuarios', href: '/user-management', icon: Shield, adminOnly: true },
     { name: 'Empleados', href: '/employees', icon: UserCheck, adminOnly: true },
+    { name: 'Historial de Actividad', href: '/activity-history', icon: Activity },
     { name: 'Notificaciones', href: '/notifications', icon: Bell },
     { name: 'Automatización', href: '/automation', icon: Bot, adminOnly: true },
     { name: 'Reportes', href: '/reports', icon: BarChart3 },

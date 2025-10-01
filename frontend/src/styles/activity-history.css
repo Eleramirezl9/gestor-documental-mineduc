@@ -1,0 +1,258 @@
+/* Animaciones personalizadas para Activity History */
+
+/* Animación de entrada para eventos del timeline */
+@keyframes slideInFromLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Animación de pulso suave para iconos */
+@keyframes softPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* Animación de brillo en hover */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+/* Clase para entrada de eventos */
+.timeline-event-enter {
+  animation: slideInFromLeft 0.5s ease-out;
+}
+
+/* Clase para pulso en iconos */
+.icon-pulse {
+  animation: softPulse 2s ease-in-out infinite;
+}
+
+/* Efecto hover en cards */
+.activity-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.activity-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(25, 150, 199, 0.15), 0 8px 10px -6px rgba(25, 150, 199, 0.1);
+}
+
+/* Efecto hover en iconos circulares */
+.activity-icon-wrapper {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.activity-icon-wrapper:hover {
+  transform: scale(1.1) rotate(5deg);
+  box-shadow: 0 8px 16px -4px rgba(25, 150, 199, 0.3);
+}
+
+/* Efecto de brillo en badges */
+.badge-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(224, 244, 251, 0.8) 0%,
+    rgba(25, 150, 199, 0.3) 50%,
+    rgba(224, 244, 251, 0.8) 100%
+  );
+  background-size: 1000px 100%;
+}
+
+.badge-shimmer:hover {
+  animation: shimmer 2s infinite;
+}
+
+/* Línea del timeline con gradiente */
+.timeline-line {
+  background: linear-gradient(
+    to bottom,
+    rgba(25, 150, 199, 0.3) 0%,
+    rgba(25, 150, 199, 0.1) 100%
+  );
+}
+
+/* Animación de carga skeleton */
+@keyframes skeletonLoading {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 0px,
+    #e0e0e0 40px,
+    #f0f0f0 80px
+  );
+  background-size: 200px 100%;
+  animation: skeletonLoading 1.5s infinite;
+}
+
+/* Transición suave para filtros */
+.filter-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Efecto ripple en botones */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.ripple:active::after {
+  width: 300px;
+  height: 300px;
+}
+
+/* Responsive: ajustes para móvil */
+@media (max-width: 768px) {
+  .timeline-event-enter {
+    animation: slideInFromLeft 0.4s ease-out;
+  }
+
+  .activity-card:hover {
+    transform: none;
+  }
+
+  .activity-icon-wrapper:hover {
+    transform: scale(1.05);
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .timeline-line {
+    background: linear-gradient(
+      to bottom,
+      rgba(25, 150, 199, 0.4) 0%,
+      rgba(25, 150, 199, 0.2) 100%
+    );
+  }
+
+  .activity-card:hover {
+    box-shadow: 0 10px 25px -5px rgba(25, 150, 199, 0.25), 0 8px 10px -6px rgba(25, 150, 199, 0.2);
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      #2a2a2a 0px,
+      #1a1a1a 40px,
+      #2a2a2a 80px
+    );
+  }
+}
+
+/* Animación de entrada escalonada para múltiples eventos */
+.timeline-event-enter:nth-child(1) { animation-delay: 0.05s; }
+.timeline-event-enter:nth-child(2) { animation-delay: 0.1s; }
+.timeline-event-enter:nth-child(3) { animation-delay: 0.15s; }
+.timeline-event-enter:nth-child(4) { animation-delay: 0.2s; }
+.timeline-event-enter:nth-child(5) { animation-delay: 0.25s; }
+.timeline-event-enter:nth-child(6) { animation-delay: 0.3s; }
+.timeline-event-enter:nth-child(7) { animation-delay: 0.35s; }
+.timeline-event-enter:nth-child(8) { animation-delay: 0.4s; }
+.timeline-event-enter:nth-child(9) { animation-delay: 0.45s; }
+.timeline-event-enter:nth-child(10) { animation-delay: 0.5s; }
+
+/* Tooltip personalizado */
+.activity-tooltip {
+  position: relative;
+}
+
+.activity-tooltip::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  background: rgba(25, 150, 199, 0.95);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s;
+  z-index: 1000;
+}
+
+.activity-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(2px);
+  border: 6px solid transparent;
+  border-top-color: rgba(25, 150, 199, 0.95);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.activity-tooltip:hover::before,
+.activity-tooltip:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+/* Efecto de focus mejorado */
+.activity-focus:focus {
+  outline: 2px solid rgba(25, 150, 199, 0.5);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Scroll suave personalizado */
+.activity-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.activity-scroll::-webkit-scrollbar-track {
+  background: rgba(226, 232, 240, 0.5);
+  border-radius: 4px;
+}
+
+.activity-scroll::-webkit-scrollbar-thumb {
+  background: rgba(25, 150, 199, 0.5);
+  border-radius: 4px;
+  transition: background 0.3s;
+}
+
+.activity-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(25, 150, 199, 0.7);
+}
