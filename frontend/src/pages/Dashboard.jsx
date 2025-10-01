@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
-import { 
-  FileText, 
-  Users, 
-  CheckCircle, 
-  Clock, 
+import { useState, useEffect, memo, useMemo } from 'react'
+import {
+  FileText,
+  Users,
+  CheckCircle,
+  Clock,
   AlertTriangle,
   TrendingUp,
   Download,
@@ -13,13 +13,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
 import { Progress } from '../components/ui/progress'
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -32,6 +32,45 @@ import { documentsAPI, usersAPI, workflowsAPI, reportsAPI } from '../lib/api'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 
+// Memoizar gráficos para evitar re-renders innecesarios
+const DocumentsBarChart = memo(({ chartData }) => (
+  <ResponsiveContainer width="100%" height={300}>
+    <BarChart data={chartData}>
+      <CartesianGrid strokeDasharray="3 3" />
+      <XAxis dataKey="name" />
+      <YAxis />
+      <Tooltip />
+      <Bar dataKey="documentos" fill="#3b82f6" name="Creados" />
+      <Bar dataKey="aprobados" fill="#10b981" name="Aprobados" />
+    </BarChart>
+  </ResponsiveContainer>
+))
+
+const DocumentsPieChart = memo(({ pieData }) => (
+  <ResponsiveContainer width="100%" height={300}>
+    <PieChart>
+      <Pie
+        data={pieData}
+        cx="50%"
+        cy="50%"
+        labelLine={false}
+        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+        outerRadius={80}
+        fill="#8884d8"
+        dataKey="value"
+      >
+        {pieData.map((entry, index) => (
+          <Cell key={`cell-${index}`} fill={entry.color} />
+        ))}
+      </Pie>
+      <Tooltip />
+    </PieChart>
+  </ResponsiveContainer>
+))
+
+DocumentsBarChart.displayName = 'DocumentsBarChart'
+DocumentsPieChart.displayName = 'DocumentsPieChart'
+
 const Dashboard = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -40,80 +79,91 @@ const Dashboard = () => {
     users: { total: 0, active: 0, inactive: 0 },
     workflows: { total: 0, pending: 0, completed: 0 }
   })
-  const [loading, setLoading] = useState(true)
+  const [loadingStates, setLoadingStates] = useState({
+    stats: true,
+    documents: true,
+    users: true,
+    workflows: true,
+    recent: true
+  })
   const [recentDocuments, setRecentDocuments] = useState([])
   const [chartData, setChartData] = useState([])
+
+  // Memoizar pieData para evitar recalcular en cada render
+  const pieData = useMemo(() => [
+    { name: 'Aprobados', value: stats.documents.approved, color: '#10b981' },
+    { name: 'Pendientes', value: stats.documents.pending, color: '#f59e0b' },
+    { name: 'Rechazados', value: stats.documents.rejected, color: '#ef4444' }
+  ], [stats.documents])
+
+  // Verificar si hay algún dato cargando
+  const isAnyLoading = useMemo(() =>
+    Object.values(loadingStates).some(Boolean),
+    [loadingStates]
+  )
 
   useEffect(() => {
     loadDashboardData()
   }, [])
 
   const loadDashboardData = async () => {
-    try {
-      setLoading(true)
+    // Cargar gráficos inmediatamente (datos mock)
+    setChartData([
+      { name: 'Ene', documentos: 65, aprobados: 45 },
+      { name: 'Feb', documentos: 78, aprobados: 62 },
+      { name: 'Mar', documentos: 90, aprobados: 75 },
+      { name: 'Abr', documentos: 81, aprobados: 68 },
+      { name: 'May', documentos: 95, aprobados: 82 },
+      { name: 'Jun', documentos: 88, aprobados: 79 }
+    ])
 
-      // Cargar datos críticos primero (stats básicas)
-      const [docsResponse, usersResponse, workflowsResponse, recentDocsResponse] = await Promise.allSettled([
-        documentsAPI.getStats(),
-        usersAPI.getStats(),
-        workflowsAPI.getStats(),
-        documentsAPI.getAll({ limit: 5, sort: 'created_at', order: 'desc' })
-      ])
-
-      // Procesar respuestas críticas
-      if (docsResponse.status === 'fulfilled') {
-        setStats(prev => ({ ...prev, documents: docsResponse.value.data }))
-      } else {
-        // Datos fallback para evitar pantallas vacías
-        setStats(prev => ({ ...prev, documents: { total: 0, pending: 0, approved: 0, rejected: 0 } }))
-      }
-
-      if (usersResponse.status === 'fulfilled') {
-        setStats(prev => ({ ...prev, users: usersResponse.value.data }))
-      } else {
-        setStats(prev => ({ ...prev, users: { total: 0, active: 0, inactive: 0 } }))
-      }
-
-      if (workflowsResponse.status === 'fulfilled') {
-        setStats(prev => ({ ...prev, workflows: workflowsResponse.value.data }))
-      } else {
-        setStats(prev => ({ ...prev, workflows: { total: 0, pending: 0, completed: 0 } }))
-      }
-
-      if (recentDocsResponse.status === 'fulfilled') {
-        setRecentDocuments(recentDocsResponse.value.data.documents || [])
-      }
-
-      // Simular datos de gráficos inmediatamente (no bloquean carga inicial)
-      setChartData([
-        { name: 'Ene', documentos: 65, aprobados: 45 },
-        { name: 'Feb', documentos: 78, aprobados: 62 },
-        { name: 'Mar', documentos: 90, aprobados: 75 },
-        { name: 'Abr', documentos: 81, aprobados: 68 },
-        { name: 'May', documentos: 95, aprobados: 82 },
-        { name: 'Jun', documentos: 88, aprobados: 79 }
-      ])
-
-    } catch (error) {
-      console.error('Error cargando datos del dashboard:', error)
-      toast.error('Error cargando datos del dashboard')
-
-      // Datos fallback para evitar pantalla rota
-      setStats({
-        documents: { total: 0, pending: 0, approved: 0, rejected: 0 },
-        users: { total: 0, active: 0, inactive: 0 },
-        workflows: { total: 0, pending: 0, completed: 0 }
+    // Cargar cada stat de forma independiente (NO bloquea UI)
+    documentsAPI.getStats()
+      .then(response => {
+        setStats(prev => ({ ...prev, documents: response.data }))
+        setLoadingStates(prev => ({ ...prev, documents: false }))
       })
-    } finally {
-      setLoading(false)
-    }
-  }
+      .catch(error => {
+        console.error('Error cargando stats de documentos:', error)
+        setStats(prev => ({ ...prev, documents: { total: 0, pending: 0, approved: 0, rejected: 0 } }))
+        setLoadingStates(prev => ({ ...prev, documents: false }))
+      })
 
-  const pieData = [
-    { name: 'Aprobados', value: stats.documents.approved, color: '#10b981' },
-    { name: 'Pendientes', value: stats.documents.pending, color: '#f59e0b' },
-    { name: 'Rechazados', value: stats.documents.rejected, color: '#ef4444' }
-  ]
+    usersAPI.getStats()
+      .then(response => {
+        setStats(prev => ({ ...prev, users: response.data }))
+        setLoadingStates(prev => ({ ...prev, users: false }))
+      })
+      .catch(error => {
+        console.error('Error cargando stats de usuarios:', error)
+        setStats(prev => ({ ...prev, users: { total: 0, active: 0, inactive: 0 } }))
+        setLoadingStates(prev => ({ ...prev, users: false }))
+      })
+
+    workflowsAPI.getStats()
+      .then(response => {
+        setStats(prev => ({ ...prev, workflows: response.data }))
+        setLoadingStates(prev => ({ ...prev, workflows: false }))
+      })
+      .catch(error => {
+        console.error('Error cargando stats de workflows:', error)
+        setStats(prev => ({ ...prev, workflows: { total: 0, pending: 0, completed: 0 } }))
+        setLoadingStates(prev => ({ ...prev, workflows: false }))
+      })
+
+    documentsAPI.getAll({ limit: 5, sort: 'created_at', order: 'desc' })
+      .then(response => {
+        setRecentDocuments(response.data.documents || [])
+        setLoadingStates(prev => ({ ...prev, recent: false }))
+      })
+      .catch(error => {
+        console.error('Error cargando documentos recientes:', error)
+        setLoadingStates(prev => ({ ...prev, recent: false }))
+      })
+
+    // Marcar como completado el loading general
+    setLoadingStates(prev => ({ ...prev, stats: false }))
+  }
 
   const getGreeting = () => {
     const hour = new Date().getHours()
@@ -153,14 +203,22 @@ const Dashboard = () => {
     }
   }
 
-  if (loading) {
+  // Solo mostrar skeleton si TODAS las stats están cargando al inicio
+  const showFullSkeleton = loadingStates.stats && isAnyLoading
+
+  if (showFullSkeleton) {
     return (
       <div className="p-6">
         <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-32 bg-gray-200 rounded"></div>
+              <div key={i} className="h-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {[...Array(2)].map((_, i) => (
+              <div key={i} className="h-80 bg-gray-200 dark:bg-gray-700 rounded"></div>
             ))}
           </div>
         </div>
@@ -258,16 +316,7 @@ const Dashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="documentos" fill="#3b82f6" name="Creados" />
-                <Bar dataKey="aprobados" fill="#10b981" name="Aprobados" />
-              </BarChart>
-            </ResponsiveContainer>
+            <DocumentsBarChart chartData={chartData} />
           </CardContent>
         </Card>
 
@@ -280,25 +329,7 @@ const Dashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            <DocumentsPieChart pieData={pieData} />
           </CardContent>
         </Card>
       </div>

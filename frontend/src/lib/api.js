@@ -15,10 +15,36 @@ console.log('🔧 API Configuration:', {
   MODE: import.meta.env.MODE
 })
 
+// Sistema de caché simple en memoria
+const cache = new Map()
+const CACHE_DURATION = 2 * 60 * 1000 // 2 minutos
+
+// Función para obtener datos del caché
+const getCachedData = (key) => {
+  const cached = cache.get(key)
+  if (!cached) return null
+
+  const now = Date.now()
+  if (now - cached.timestamp > CACHE_DURATION) {
+    cache.delete(key)
+    return null
+  }
+
+  return cached.data
+}
+
+// Función para guardar en caché
+const setCachedData = (key, data) => {
+  cache.set(key, {
+    data,
+    timestamp: Date.now()
+  })
+}
+
 // Crear instancia de axios
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
-  timeout: 30000,
+  timeout: 10000, // Reducido de 30s a 10s para respuestas más rápidas
   headers: {
     'Content-Type': 'application/json',
   },
@@ -62,46 +88,125 @@ export const authAPI = {
   changePassword: (passwordData) => api.put('/auth/change-password', passwordData),
 }
 
-// Usuarios
+// Usuarios con caché
 export const usersAPI = {
-  getAll: (params) => api.get('/users', { params }),
+  getAll: async (params) => {
+    const cacheKey = `users_${JSON.stringify(params || {})}`
+    const cached = getCachedData(cacheKey)
+    if (cached) return { data: cached }
+
+    const response = await api.get('/users', { params })
+    setCachedData(cacheKey, response.data)
+    return response
+  },
   getById: (id) => api.get(`/users/${id}`),
-  create: (userData) => api.post('/users', userData),
-  update: (id, userData) => api.put(`/users/${id}`, userData),
-  delete: (id) => api.delete(`/users/${id}`),
-  toggleStatus: (id) => api.put(`/users/${id}/toggle-status`),
+  create: (userData) => {
+    cache.clear() // Limpiar caché al crear
+    return api.post('/users', userData)
+  },
+  update: (id, userData) => {
+    cache.clear() // Limpiar caché al actualizar
+    return api.put(`/users/${id}`, userData)
+  },
+  delete: (id) => {
+    cache.clear() // Limpiar caché al eliminar
+    return api.delete(`/users/${id}`)
+  },
+  toggleStatus: (id) => {
+    cache.clear()
+    return api.put(`/users/${id}/toggle-status`)
+  },
   invite: (inviteData) => api.post('/users/invite', inviteData),
-  getStats: () => api.get('/users/stats/overview'),
+  getStats: async () => {
+    const cacheKey = 'users_stats'
+    const cached = getCachedData(cacheKey)
+    if (cached) return { data: cached }
+
+    const response = await api.get('/users/stats/overview')
+    setCachedData(cacheKey, response.data)
+    return response
+  },
 }
 
-// Documentos
+// Documentos con caché
 export const documentsAPI = {
-  getAll: (params) => api.get('/documents', { params }),
+  getAll: async (params) => {
+    const cacheKey = `documents_${JSON.stringify(params || {})}`
+    const cached = getCachedData(cacheKey)
+    if (cached) return { data: cached }
+
+    const response = await api.get('/documents', { params })
+    setCachedData(cacheKey, response.data)
+    return response
+  },
   getById: (id) => api.get(`/documents/${id}`),
   getByUser: (userId) => api.get(`/documents/user/${userId}`),
-  create: (documentData) => api.post('/documents', documentData),
-  update: (id, documentData) => api.put(`/documents/${id}`, documentData),
-  delete: (id) => api.delete(`/documents/${id}`),
-  upload: (formData) => api.post('/documents/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
-  uploadToDocument: (id, formData) => api.post(`/documents/${id}/upload`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
+  create: (documentData) => {
+    cache.clear()
+    return api.post('/documents', documentData)
+  },
+  update: (id, documentData) => {
+    cache.clear()
+    return api.put(`/documents/${id}`, documentData)
+  },
+  delete: (id) => {
+    cache.clear()
+    return api.delete(`/documents/${id}`)
+  },
+  upload: (formData) => {
+    cache.clear()
+    return api.post('/documents/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  uploadToDocument: (id, formData) => {
+    cache.clear()
+    return api.post(`/documents/${id}/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
   download: (id) => api.get(`/documents/${id}/download`),
   getDownloadUrl: (id) => api.get(`/documents/${id}/download`),
-  getStats: () => api.get('/documents/stats/overview'),
+  getStats: async () => {
+    const cacheKey = 'documents_stats'
+    const cached = getCachedData(cacheKey)
+    if (cached) return { data: cached }
+
+    const response = await api.get('/documents/stats/overview')
+    setCachedData(cacheKey, response.data)
+    return response
+  },
 }
 
-// Flujos de trabajo
+// Flujos de trabajo con caché
 export const workflowsAPI = {
   getAll: (params) => api.get('/workflows', { params }),
   getById: (id) => api.get(`/workflows/${id}`),
-  create: (workflowData) => api.post('/workflows', workflowData),
-  update: (id, workflowData) => api.put(`/workflows/${id}`, workflowData),
-  approve: (id, approvalData) => api.post(`/workflows/${id}/approve`, approvalData),
-  reject: (id, rejectionData) => api.post(`/workflows/${id}/reject`, rejectionData),
-  getStats: () => api.get('/workflows/stats/overview'),
+  create: (workflowData) => {
+    cache.clear()
+    return api.post('/workflows', workflowData)
+  },
+  update: (id, workflowData) => {
+    cache.clear()
+    return api.put(`/workflows/${id}`, workflowData)
+  },
+  approve: (id, approvalData) => {
+    cache.clear()
+    return api.post(`/workflows/${id}/approve`, approvalData)
+  },
+  reject: (id, rejectionData) => {
+    cache.clear()
+    return api.post(`/workflows/${id}/reject`, rejectionData)
+  },
+  getStats: async () => {
+    const cacheKey = 'workflows_stats'
+    const cached = getCachedData(cacheKey)
+    if (cached) return { data: cached }
+
+    const response = await api.get('/workflows/stats/overview')
+    setCachedData(cacheKey, response.data)
+    return response
+  },
 }
 
 

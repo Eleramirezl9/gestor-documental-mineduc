@@ -13,7 +13,15 @@ export const useAuth = () => {
 }
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState(() => {
+    // Intentar cargar usuario desde localStorage para carga inmediata
+    try {
+      const cached = localStorage.getItem('mineduc_user')
+      return cached ? JSON.parse(cached) : null
+    } catch {
+      return null
+    }
+  })
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState(null)
 
@@ -24,9 +32,9 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('🔍 Obteniendo perfil para userId:', userId)
 
-      // Timeout de 3 segundos para evitar bloqueos
+      // Timeout reducido de 3s a 1s para evitar bloqueos
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout')), 3000)
+        setTimeout(() => reject(new Error('Timeout')), 1000)
       )
 
       const queryPromise = supabase
@@ -90,6 +98,12 @@ export const AuthProvider = ({ children }) => {
           }
           console.log('👤 Usuario con rol asignado:', { email: userWithRole.email, role: userWithRole.role })
           setUser(userWithRole)
+          // Guardar en localStorage para carga rápida futura
+          try {
+            localStorage.setItem('mineduc_user', JSON.stringify(userWithRole))
+          } catch (e) {
+            console.warn('No se pudo guardar usuario en localStorage:', e)
+          }
 
           // Perfil desde DB deshabilitado para evitar errores de RLS
           // getUserProfile(session.user.id).then(profile => {
@@ -101,6 +115,7 @@ export const AuthProvider = ({ children }) => {
         } else {
           console.log('ℹ️ No hay sesión activa')
           setUser(null)
+          localStorage.removeItem('mineduc_user')
         }
       } catch (error) {
         console.error('❌ Error inesperado en getInitialSession:', error)
@@ -134,6 +149,12 @@ export const AuthProvider = ({ children }) => {
               role: role
             }
             setUser(userWithRole)
+            // Guardar en localStorage
+            try {
+              localStorage.setItem('mineduc_user', JSON.stringify(userWithRole))
+            } catch (e) {
+              console.warn('No se pudo guardar usuario en localStorage:', e)
+            }
 
             // Perfil desde DB deshabilitado para evitar errores de RLS
             // getUserProfile(session.user.id).then(profile => {
@@ -144,6 +165,7 @@ export const AuthProvider = ({ children }) => {
             // }).catch(err => console.log('ℹ️ No se pudo obtener perfil desde DB:', err.message))
           } else {
             setUser(null)
+            localStorage.removeItem('mineduc_user')
           }
 
           if (event === 'SIGNED_IN') {
@@ -215,7 +237,10 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true)
       const { error } = await supabase.auth.signOut()
-      
+
+      // Limpiar localStorage
+      localStorage.removeItem('mineduc_user')
+
       if (error) {
         toast.error(error.message)
         return { success: false, error: error.message }
