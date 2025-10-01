@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Document management system for Guatemala's Ministry of Education (MINEDUC). Full-stack application with React frontend, Node.js/Express backend, and Supabase PostgreSQL database with AI-powered document classification and OCR capabilities.
+Document management system for Guatemala's Ministry of Education (MINEDUC). Full-stack application with React frontend, Node.js/Express backend, Supabase PostgreSQL database with AI-powered document classification and OCR capabilities, plus MCP server for Supabase operations.
 
 ## Development Commands
 
@@ -18,6 +18,12 @@ npm run test         # Run tests for both frontend and backend
 npm run lint         # Run ESLint on frontend
 npm run install:all  # Install dependencies for all workspaces
 npm run clean        # Remove all node_modules directories
+```
+
+### MCP Server (`mcp-supabase/`)
+```bash
+npm start            # Start MCP server for Supabase operations
+npm run dev          # Start MCP server with auto-restart (--watch)
 ```
 
 ### Backend (`backend/`)
@@ -49,6 +55,7 @@ npm start            # Alias for npm run preview
 - **Database**: PostgreSQL via Supabase with Row Level Security
 - **Auth**: Supabase Auth + JWT middleware
 - **AI**: OpenAI API for classification, Tesseract.js for OCR
+- **MCP**: Model Context Protocol server for Supabase operations
 - **Deployment**: Vercel (frontend), Render (backend)
 - **Package Manager**: pnpm (frontend), npm (backend)
 - **Testing**: Jest (backend), ESLint (frontend)
@@ -63,6 +70,8 @@ npm start            # Alias for npm run preview
 **Frontend Structure**: Component-based with shadcn/ui, custom auth hook (`hooks/useAuth.jsx`), API layer (`lib/api.js`, `lib/supabase.js`), toast notifications. Uses path aliases (`@` → `./src`). Located in `frontend/` directory.
 
 **Database**: UUID primary keys, comprehensive audit logging, document workflows, full-text search capabilities. Complete schema in `database/schema.sql`. Additional employee management schemas available in `database/employee_management_schema.sql`.
+
+**MCP Server**: Model Context Protocol server for Supabase database operations with full CRUD capabilities. Provides database interaction tools for Claude Code integration. Located in `mcp-supabase/` directory with Claude configuration in `claude-config.json`.
 
 ## Environment Configuration
 
@@ -82,6 +91,12 @@ VITE_SUPABASE_ANON_KEY=
 VITE_API_BASE_URL=http://localhost:5000
 ```
 
+### MCP Server (`.env`)
+```
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
 ## Database Setup
 
 1. Execute `database/schema.sql` in Supabase SQL editor
@@ -94,28 +109,31 @@ Test users: admin@mineduc.gob.gt, editor@mineduc.gob.gt, viewer@mineduc.gob.gt
 
 ## Key Configuration Files
 
-- `package.json` - Root workspace configuration with npm workspaces for frontend/backend
+- `package.json` - Root workspace configuration with npm workspaces for frontend/backend/mcp-supabase
 - `frontend/package.json` - Frontend dependencies (React 19, Vite, Tailwind CSS v4, shadcn/ui)
 - `backend/package.json` - Backend dependencies (Express, Supabase, OpenAI, Tesseract.js)
+- `mcp-supabase/package.json` - MCP server dependencies (@modelcontextprotocol/sdk, @supabase/supabase-js)
 - `frontend/vite.config.js` - Vite config with path aliases (`@` → `./src`), React + Tailwind CSS plugins, optimized build chunks
 - `frontend/eslint.config.js` - ESLint config with React hooks rules and unused vars handling
 - `vercel.json` - Frontend deployment configuration with CORS headers and rewrites
 - `backend/render.yaml` - Backend deployment configuration with environment variables
 - `backend/server.js` - Express server with Swagger API documentation setup and comprehensive middleware
+- `mcp-supabase/claude-config.json` - Claude MCP server configuration for database operations
 - Health check available at `/health` endpoint with database and storage status
 
 ## Development Notes
 
-- **Workspace Structure**: Root package.json manages npm workspaces for frontend/backend
+- **Workspace Structure**: Root package.json manages npm workspaces for frontend/backend (MCP server not included in workspaces)
 - Frontend uses **pnpm** as package manager (see `packageManager` field in frontend/package.json)
 - Backend uses **npm** as package manager
+- MCP server uses **npm** as package manager
 - Backend has comprehensive Swagger API documentation setup with JWT auth at `/api-docs`
 - ESLint configured to ignore unused variables starting with capital letters or underscores
 - Both dev servers run with `--host` flag for network access
 - Frontend build optimized with manual chunks for vendor libraries (React, UI, charts, forms, API, styling, utils)
 - Backend includes multiple test scripts for different scenarios (auth, basic functionality)
 - CORS configured for both development (localhost:5173, localhost:3000) and production URLs
-- Rate limiting implemented: 100 req/15min general, 30 req/15min auth routes
+- Rate limiting implemented: 100 req/15min general, 5 req/15min auth routes (not 30)
 
 ## Authentication & Security
 

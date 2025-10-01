@@ -7,6 +7,10 @@
         "SUPABASE_URL": "https://vyhyyddvktqfjrsogwtf.supabase.co",
         "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5aHl5ZGR2a3RxZmpyc29nd3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTA0MzAzNiwiZXhwIjoyMDcwNjE5MDM2fQ.nTsuidx7V9X2t3FnlMoblbkMZFXHiDVQ3NMatDBn8DQ"
       }
+    },
+    "puppeteer": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
     }
   }
 }

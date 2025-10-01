@@ -2,6 +2,10 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import { createClient } from '@supabase/supabase-js';
 
 const server = new Server(
@@ -36,7 +40,7 @@ function initializeSupabase() {
 }
 
 // Tool definitions
-server.setRequestHandler('tools/list', async () => {
+server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       // CRUD Operations
@@ -245,7 +249,7 @@ server.setRequestHandler('tools/list', async () => {
 });
 
 // Tool implementations
-server.setRequestHandler('tools/call', async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (!supabase) {
     initializeSupabase();
   }
