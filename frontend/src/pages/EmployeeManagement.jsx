@@ -1765,7 +1765,11 @@ const EmployeeManagement = () => {
 
     return (
       <Dialog open={showEmployeeProfile} onOpenChange={setShowEmployeeProfile} modal={false}>
-        <DialogContent className="max-w-[98vw] w-[95vw] sm:w-[85vw] h-[85vh] sm:h-[80vh] p-0 overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl">
+        <DialogContent
+          className="max-w-[98vw] w-[95vw] sm:w-[85vw] h-[85vh] sm:h-[80vh] p-0 overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader className="sr-only">
             <DialogTitle>
               Perfil de {selectedEmployee.first_name} {selectedEmployee.last_name}
@@ -2612,7 +2616,11 @@ const EmployeeManagement = () => {
       {/* Modal de Asignación de Documentos Requeridos */}
       {showDocumentsModal && selectedEmployeeForDocuments && (
         <Dialog open={showDocumentsModal} onOpenChange={setShowDocumentsModal} modal={false}>
-          <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden">
+          <DialogContent
+            className="max-w-5xl max-h-[90vh] overflow-hidden"
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onInteractOutside={(e) => e.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5 text-blue-600" />
@@ -3234,8 +3242,13 @@ const EmployeeManagement = () => {
       <Dialog
         open={editDocumentDialog.open}
         onOpenChange={(open) => !open && setEditDocumentDialog({ open: false, document: null })}
+        modal={false}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent
+          className="max-w-lg"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit className="h-5 w-5 text-blue-600" />
@@ -3329,7 +3342,11 @@ const EmployeeManagement = () => {
       {/* Modal para Crear Nuevo Tipo de Documento */}
       {showNewDocumentModal && (
         <Dialog open={showNewDocumentModal} onOpenChange={setShowNewDocumentModal} modal={false}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent
+            className="max-w-2xl"
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onInteractOutside={(e) => e.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <PlusCircle className="h-5 w-5 text-blue-600" />
@@ -3625,7 +3642,11 @@ const EmployeeManagement = () => {
       {/* Modal Selector de Plantillas */}
       {showTemplateSelector && (
         <Dialog open={showTemplateSelector} onOpenChange={setShowTemplateSelector} modal={false}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
+          <DialogContent
+            className="max-w-4xl max-h-[80vh] overflow-hidden"
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onInteractOutside={(e) => e.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 {getTemplateIcon('template', 'h-5 w-5 text-purple-600')}
@@ -3752,7 +3773,11 @@ const EmployeeManagement = () => {
       {/* Modal Crear Plantilla Personalizada */}
       {showCreateTemplateModal && (
         <Dialog open={showCreateTemplateModal} onOpenChange={setShowCreateTemplateModal} modal={false}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+          <DialogContent
+            className="max-w-4xl max-h-[90vh] overflow-hidden"
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onInteractOutside={(e) => e.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 {getTemplateIcon('template', 'h-5 w-5 text-purple-600')}
