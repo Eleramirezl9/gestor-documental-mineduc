@@ -63,6 +63,17 @@ const EmployeeManagement = () => {
   const [documentItems, setDocumentItems] = useState([]);
   const [assignedDocuments, setAssignedDocuments] = useState([]);
 
+  // Estados para modal de subir documento
+  const [showUploadDocumentModal, setShowUploadDocumentModal] = useState(false);
+  const [uploadDocumentForm, setUploadDocumentForm] = useState({
+    employeeId: '',
+    documentType: '',
+    file: null,
+    approvalStatus: 'pendiente',
+    autoApprove: false,
+    notes: ''
+  });
+
   // Estados para crear nuevos tipos de documentos
   const [showNewDocumentModal, setShowNewDocumentModal] = useState(false);
   const [customDocuments, setCustomDocuments] = useState([]);
@@ -1003,8 +1014,9 @@ const EmployeeManagement = () => {
         status: 'Completo',
         uploadDate: '2024-01-15',
         type: 'PDF',
+        uploadedBy: 'Juan Pérez',
         approvalStatus: 'aprobado',
-        comments: [{ user: 'Admin', text: 'Documento correcto' }]
+        comments: [{ user: 'Admin', text: 'Documento correcto y completo' }]
       },
       {
         id: 2,
@@ -1012,6 +1024,7 @@ const EmployeeManagement = () => {
         status: 'Completo',
         uploadDate: '2024-01-15',
         type: 'PDF',
+        uploadedBy: 'María González',
         approvalStatus: 'pendiente',
         comments: []
       },
@@ -1021,8 +1034,12 @@ const EmployeeManagement = () => {
         status: 'Completo',
         uploadDate: '2024-01-20',
         type: 'PDF',
+        uploadedBy: 'Ana López',
         approvalStatus: 'pendiente',
-        comments: [{ user: 'RH', text: 'Revisar fecha de vencimiento' }]
+        comments: [
+          { user: 'RH', text: 'Revisar fecha de vencimiento' },
+          { user: 'Dr. Ramírez', text: 'Certificado vigente hasta 2025' }
+        ]
       },
       {
         id: 4,
@@ -1030,6 +1047,7 @@ const EmployeeManagement = () => {
         status: 'Pendiente',
         uploadDate: null,
         type: 'PDF',
+        uploadedBy: null,
         approvalStatus: 'pendiente',
         comments: []
       },
@@ -1039,16 +1057,76 @@ const EmployeeManagement = () => {
         status: 'Vencido',
         uploadDate: '2023-12-01',
         type: 'PDF',
+        uploadedBy: 'Sistema',
         approvalStatus: 'rechazado',
-        comments: [{ user: 'Admin', text: 'Documento vencido, favor actualizar' }]
+        comments: [{ user: 'Admin', text: 'Documento vencido, favor actualizar antes del 30/01/2025' }]
       }
     ];
 
     const activities = [
-      { id: 1, action: 'Subió documento', detail: 'Certificado Médico', date: '2024-01-20 10:30 AM', type: 'upload' },
-      { id: 2, action: 'Subió documento', detail: 'DPI Escaneado', date: '2024-01-15 02:15 PM', type: 'upload' },
-      { id: 3, action: 'Subió documento', detail: 'Contrato de Trabajo', date: '2024-01-15 09:00 AM', type: 'upload' },
-      { id: 4, action: 'Perfil creado', detail: 'Cuenta de empleado activada', date: '2024-01-15 08:30 AM', type: 'system' }
+      {
+        id: 1,
+        action: 'Documento aprobado',
+        detail: 'Contrato de Trabajo',
+        date: '2024-01-22 03:45 PM',
+        type: 'approval',
+        user: 'Admin Principal',
+        category: 'Aprobación'
+      },
+      {
+        id: 2,
+        action: 'Subió documento',
+        detail: 'Certificado Médico',
+        date: '2024-01-20 10:30 AM',
+        type: 'upload',
+        user: 'Ana López',
+        category: 'Documento'
+      },
+      {
+        id: 3,
+        action: 'Comentario agregado',
+        detail: 'Revisar fecha de vencimiento del certificado',
+        date: '2024-01-20 11:15 AM',
+        type: 'comment',
+        user: 'RH Supervisor',
+        category: 'Revisión'
+      },
+      {
+        id: 4,
+        action: 'Subió documento',
+        detail: 'DPI Escaneado',
+        date: '2024-01-15 02:15 PM',
+        type: 'upload',
+        user: 'María González',
+        category: 'Documento'
+      },
+      {
+        id: 5,
+        action: 'Documento rechazado',
+        detail: 'Antecedentes Penales (documento vencido)',
+        date: '2024-01-16 09:20 AM',
+        type: 'rejection',
+        user: 'Admin Principal',
+        category: 'Rechazo'
+      },
+      {
+        id: 6,
+        action: 'Perfil actualizado',
+        detail: 'Información de contacto modificada',
+        date: '2024-01-15 09:00 AM',
+        type: 'edit',
+        user: 'Sistema',
+        category: 'Sistema'
+      },
+      {
+        id: 7,
+        action: 'Perfil creado',
+        detail: 'Cuenta de empleado activada',
+        date: '2024-01-15 08:30 AM',
+        type: 'system',
+        user: 'Sistema',
+        category: 'Sistema'
+      }
     ];
 
     const getStatusIcon = (status) => {
@@ -1067,15 +1145,23 @@ const EmployeeManagement = () => {
     const getActivityIcon = (type) => {
       switch (type) {
         case 'upload':
-          return <Upload className="h-4 w-4 text-blue-500" />;
+          return { icon: <Upload className="h-5 w-5" />, bg: 'bg-blue-500', label: 'Subida' };
+        case 'approval':
+          return { icon: <CheckCircle className="h-5 w-5" />, bg: 'bg-green-500', label: 'Aprobado' };
+        case 'rejection':
+          return { icon: <XCircle className="h-5 w-5" />, bg: 'bg-red-500', label: 'Rechazado' };
+        case 'comment':
+          return { icon: <MessageSquare className="h-5 w-5" />, bg: 'bg-purple-500', label: 'Comentario' };
+        case 'edit':
+          return { icon: <Settings className="h-5 w-5" />, bg: 'bg-orange-500', label: 'Editado' };
         case 'download':
-          return <DownloadIcon className="h-4 w-4 text-green-500" />;
+          return { icon: <DownloadIcon className="h-5 w-5" />, bg: 'bg-teal-500', label: 'Descarga' };
         case 'view':
-          return <Eye className="h-4 w-4 text-gray-500" />;
+          return { icon: <Eye className="h-5 w-5" />, bg: 'bg-gray-500', label: 'Visto' };
         case 'system':
-          return <Shield className="h-4 w-4 text-purple-500" />;
+          return { icon: <Shield className="h-5 w-5" />, bg: 'bg-indigo-500', label: 'Sistema' };
         default:
-          return <Activity className="h-4 w-4 text-gray-500" />;
+          return { icon: <Activity className="h-5 w-5" />, bg: 'bg-gray-500', label: 'Actividad' };
       }
     };
 
@@ -1178,47 +1264,52 @@ const EmployeeManagement = () => {
       const documentosContent = (
         <div className="space-y-5">
           {/* Header con filtros sticky */}
-          <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 pb-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="sticky top-0 z-10 bg-[#F2F4F6] dark:bg-gray-900 pb-4 border-b border-[#E1E4E8] dark:border-gray-700">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
               <div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Documentos del Empleado</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Gestión y revisión de documentación oficial</p>
+                <h3 className="text-xl font-bold text-[#2C3E50] dark:text-white">Documentos del Empleado</h3>
+                <p className="text-sm text-[#636E7B] dark:text-gray-400 mt-1">Gestión y revisión de documentación oficial</p>
               </div>
-              <Button
-                size="sm"
-                className="w-full sm:w-auto bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-md hover:shadow-lg transition-all"
-                aria-label="Subir nuevo documento"
+              <button
+                onClick={() => setShowUploadDocumentModal(true)}
+                className="px-5 py-2 rounded-lg shadow-md bg-[#2C3E50] text-white hover:bg-[#1F2A38] focus:ring-2 focus:ring-offset-2 focus:ring-[#2C3E50] transition-all flex items-center gap-2 w-full sm:w-auto"
+                aria-label="Subir nuevo documento al empleado"
+                title="Agregar un documento para revisión"
               >
-                <Upload className="h-4 w-4 mr-2" />
+                <Upload className="h-4 w-4" />
                 Subir Documento
-              </Button>
+              </button>
             </div>
 
-            {/* Filtros rápidos */}
-            <div className="flex flex-wrap gap-2">
+            {/* Filtros rápidos tipo chip */}
+            <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
               <button
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors border border-gray-300 dark:border-gray-600"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-[#27272A] text-[#2C3E50] dark:text-gray-300 border border-[#E1E4E8] dark:border-[#3F3F46] hover:bg-[#F2F4F6] dark:hover:bg-gray-700 transition-colors whitespace-nowrap"
                 aria-label="Filtrar todos los documentos"
+                title="Mostrar todos los documentos"
               >
                 Todos ({documents.length})
               </button>
               <button
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-colors border border-yellow-200 dark:border-yellow-700"
-                aria-label="Filtrar documentos pendientes"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#F39C12]/20 text-[#F39C12] hover:bg-[#F39C12]/30 transition-colors whitespace-nowrap"
+                aria-label="Filtrar documentos pendientes de revisión"
+                title="Filtrar por documentos pendientes"
               >
-                Pendiente ({documents.filter(d => d.approvalStatus === 'pendiente').length})
+                ! Pendiente ({documents.filter(d => d.approvalStatus === 'pendiente').length})
               </button>
               <button
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors border border-green-200 dark:border-green-700"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#27AE60]/20 text-[#27AE60] hover:bg-[#27AE60]/30 transition-colors whitespace-nowrap"
                 aria-label="Filtrar documentos aprobados"
+                title="Filtrar por documentos aprobados"
               >
-                Aprobado ({documents.filter(d => d.approvalStatus === 'aprobado').length})
+                ✓ Aprobado ({documents.filter(d => d.approvalStatus === 'aprobado').length})
               </button>
               <button
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors border border-red-200 dark:border-red-700"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#C0392B]/20 text-[#C0392B] hover:bg-[#C0392B]/30 transition-colors whitespace-nowrap"
                 aria-label="Filtrar documentos rechazados"
+                title="Filtrar por documentos rechazados"
               >
-                Rechazado ({documents.filter(d => d.approvalStatus === 'rechazado').length})
+                ✗ Rechazado ({documents.filter(d => d.approvalStatus === 'rechazado').length})
               </button>
             </div>
           </div>
@@ -1228,10 +1319,10 @@ const EmployeeManagement = () => {
             {documents.map((doc) => (
               <div
                 key={doc.id}
-                className="group relative border-l-4 border-gray-200 dark:border-gray-700 rounded-r-xl bg-white dark:bg-gray-800 shadow-sm hover:shadow-lg transition-all duration-300 hover:border-l-[#1e40af] overflow-hidden"
+                className="group relative border-l-4 rounded-2xl bg-white dark:bg-[#27272A] shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden border border-[#E1E4E8] dark:border-[#3F3F46]"
                 style={{
-                  borderLeftColor: doc.approvalStatus === 'aprobado' ? '#10b981' :
-                                  doc.approvalStatus === 'rechazado' ? '#ef4444' : '#eab308'
+                  borderLeftColor: doc.approvalStatus === 'aprobado' ? '#27AE60' :
+                                  doc.approvalStatus === 'rechazado' ? '#C0392B' : '#F39C12'
                 }}
               >
                 <div className="p-5">
@@ -1239,12 +1330,12 @@ const EmployeeManagement = () => {
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                       {/* Icono del tipo de documento */}
-                      <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#1e40af] to-[#3b82f6] flex items-center justify-center shadow-md">
+                      <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#2C3E50] to-[#34495E] flex items-center justify-center shadow-md">
                         <FileText className="h-6 w-6 text-white" />
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-base font-bold text-gray-900 dark:text-white mb-1 truncate group-hover:text-[#1e40af] transition-colors">
+                        <h4 className="text-base font-bold text-gray-900 dark:text-white mb-1 truncate group-hover:text-[#2C3E50] transition-colors">
                           {doc.name}
                         </h4>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
@@ -1265,12 +1356,13 @@ const EmployeeManagement = () => {
                       <Badge
                         className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg shadow-sm ${
                           doc.approvalStatus === 'aprobado'
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-2 border-green-300 dark:border-green-700' :
+                            ? 'bg-[#27AE60]/20 text-[#27AE60] dark:bg-[#27AE60]/20 dark:text-[#27AE60] border-2 border-[#27AE60]/30' :
                           doc.approvalStatus === 'rechazado'
-                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-2 border-red-300 dark:border-red-700' :
-                          'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 border-2 border-yellow-300 dark:border-yellow-700'
+                            ? 'bg-[#C0392B]/20 text-[#C0392B] dark:bg-[#C0392B]/20 dark:text-[#C0392B] border-2 border-[#C0392B]/30' :
+                          'bg-[#F39C12]/20 text-[#F39C12] dark:bg-[#F39C12]/20 dark:text-[#F39C12] border-2 border-[#F39C12]/30'
                         }`}
                         aria-label={`Estado: ${doc.approvalStatus}`}
+                        title={`Estado del documento: ${doc.approvalStatus}`}
                       >
                         {doc.approvalStatus === 'aprobado' && <CheckCircle className="h-3.5 w-3.5" />}
                         {doc.approvalStatus === 'rechazado' && <XCircle className="h-3.5 w-3.5" />}
@@ -1282,13 +1374,14 @@ const EmployeeManagement = () => {
 
                   {/* Acciones principales - Diseño mejorado */}
                   {doc.uploadDate && (
-                    <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
+                    <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[#E1E4E8] dark:border-[#3F3F46]">
                       {/* Ver documento */}
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 px-4 text-xs font-medium hover:bg-[#1e40af] hover:text-white hover:border-[#1e40af] transition-all"
+                        className="h-9 px-4 text-xs font-medium border-[#E1E4E8] dark:border-[#3F3F46] hover:bg-[#2C3E50] hover:text-white hover:border-[#2C3E50] transition-all"
                         aria-label={`Ver documento ${doc.name}`}
+                        title="Ver contenido del documento"
                       >
                         <Eye className="h-3.5 w-3.5 mr-1.5" />
                         Ver documento
@@ -1299,19 +1392,20 @@ const EmployeeManagement = () => {
                         <div className="flex gap-2 ml-auto">
                           <Button
                             size="sm"
-                            className="h-9 px-4 text-xs font-medium bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-md transition-all"
+                            className="h-9 px-4 text-xs font-medium bg-[#27AE60] hover:bg-[#229954] text-white shadow-sm hover:shadow-md transition-all focus:ring-2 focus:ring-offset-2 focus:ring-[#27AE60]"
                             onClick={() => {/* Aprobar */}}
                             aria-label={`Aprobar documento ${doc.name}`}
+                            title="Aprobar este documento"
                           >
                             <Check className="h-3.5 w-3.5 mr-1.5" />
                             Aprobar
                           </Button>
                           <Button
                             size="sm"
-                            variant="destructive"
-                            className="h-9 px-4 text-xs font-medium shadow-sm hover:shadow-md transition-all"
+                            className="h-9 px-4 text-xs font-medium bg-[#C0392B] hover:bg-[#A93226] text-white shadow-sm hover:shadow-md transition-all focus:ring-2 focus:ring-offset-2 focus:ring-[#C0392B]"
                             onClick={() => {/* Rechazar */}}
                             aria-label={`Rechazar documento ${doc.name}`}
+                            title="Rechazar este documento"
                           >
                             <X className="h-3.5 w-3.5 mr-1.5" />
                             Rechazar
@@ -1323,11 +1417,12 @@ const EmployeeManagement = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        className={`h-9 px-4 text-xs font-medium transition-all ${
+                        className={`h-9 px-4 text-xs font-medium border-[#E1E4E8] dark:border-[#3F3F46] hover:bg-[#2C3E50] hover:text-white hover:border-[#2C3E50] transition-all ${
                           doc.approvalStatus !== 'pendiente' ? 'ml-auto' : ''
                         }`}
                         onClick={() => {/* Agregar comentario */}}
                         aria-label={`Agregar comentario a ${doc.name}`}
+                        title="Agregar un comentario"
                       >
                         <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
                         Comentar
@@ -1337,8 +1432,8 @@ const EmployeeManagement = () => {
 
                   {/* Sección de comentarios mejorada */}
                   {doc.comments && doc.comments.length > 0 && (
-                    <div className="mt-4 p-3 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-800/10 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-blue-900 dark:text-blue-200 mb-2">
+                    <div className="mt-4 p-3 bg-gradient-to-br from-[#2C3E50]/5 to-[#2C3E50]/10 dark:from-[#2C3E50]/20 dark:to-[#2C3E50]/10 rounded-lg border border-[#E1E4E8] dark:border-[#3F3F46]">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-[#2C3E50] dark:text-gray-200 mb-2">
                         <MessageSquare className="h-3.5 w-3.5" />
                         Comentarios ({doc.comments.length})
                       </div>
@@ -1346,9 +1441,9 @@ const EmployeeManagement = () => {
                         {doc.comments.slice(-2).map((comment, idx) => (
                           <div
                             key={idx}
-                            className="text-xs bg-white/60 dark:bg-gray-800/40 p-2 rounded border border-blue-100 dark:border-blue-900"
+                            className="text-xs bg-white/60 dark:bg-gray-800/40 p-2 rounded border border-[#E1E4E8] dark:border-[#3F3F46]"
                           >
-                            <span className="font-semibold text-blue-800 dark:text-blue-300">{comment.user}:</span>{' '}
+                            <span className="font-semibold text-[#2C3E50] dark:text-gray-300">{comment.user}:</span>{' '}
                             <span className="text-gray-700 dark:text-gray-300">{comment.text}</span>
                           </div>
                         ))}
@@ -1358,37 +1453,131 @@ const EmployeeManagement = () => {
                 </div>
 
                 {/* Indicador visual de hover */}
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-[#1e40af] to-[#3b82f6] transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-[#2C3E50] to-[#34495E] transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
               </div>
             ))}
           </div>
 
           {/* Footer con información adicional */}
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="pt-4 border-t border-[#E1E4E8] dark:border-[#3F3F46]">
             <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
               Total de documentos: <span className="font-semibold">{documents.length}</span> |
-              Pendientes de revisión: <span className="font-semibold text-yellow-600">{documents.filter(d => d.approvalStatus === 'pendiente').length}</span>
+              Pendientes de revisión: <span className="font-semibold text-[#F39C12]">{documents.filter(d => d.approvalStatus === 'pendiente').length}</span>
             </p>
           </div>
         </div>
       );
 
       const actividadContent = (
-        <div className="space-y-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Actividad Reciente</h3>
-          <div className="space-y-3">
-            {activities.map((activity) => (
-              <div key={activity.id} className="flex items-start gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
-                <div className="mt-0.5 flex-shrink-0">
-                  {getActivityIcon(activity.type)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 dark:text-white">{activity.action}</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 truncate">{activity.detail}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">{activity.date}</div>
-                </div>
+        <div className="space-y-5">
+          {/* Header */}
+          <div className="sticky top-0 z-10 bg-[#F2F4F6] dark:bg-gray-900 pb-4 border-b border-[#E1E4E8] dark:border-[#3F3F46]">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Historial de Actividad</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Registro completo de acciones y cambios</p>
               </div>
-            ))}
+              <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <Activity className="h-4 w-4" />
+                <span>{activities.length} actividades registradas</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Timeline de actividades */}
+          <div className="relative">
+            {/* Línea vertical del timeline */}
+            <div className="absolute left-[23px] top-0 bottom-0 w-0.5 bg-gradient-to-b from-[#2C3E50] via-[#E1E4E8] to-transparent dark:via-[#3F3F46]"></div>
+
+            <div className="space-y-6">
+              {activities.map((activity, index) => {
+                const activityData = getActivityIcon(activity.type);
+
+                return (
+                  <div key={activity.id} className="relative pl-14">
+                    {/* Icono en el timeline */}
+                    <div className={`absolute left-0 w-12 h-12 rounded-xl ${activityData.bg} flex items-center justify-center text-white shadow-lg ring-4 ring-white dark:ring-gray-900 transform transition-transform hover:scale-110`}>
+                      {activityData.icon}
+                    </div>
+
+                    {/* Tarjeta de actividad */}
+                    <div className="group relative bg-white dark:bg-[#27272A] rounded-2xl border-2 border-[#E1E4E8] dark:border-[#3F3F46] p-4 shadow-sm hover:shadow-lg hover:border-[#2C3E50] transition-all duration-300">
+                      {/* Header de la tarjeta */}
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="text-base font-bold text-gray-900 dark:text-white group-hover:text-[#2C3E50] transition-colors">
+                              {activity.action}
+                            </h4>
+                            <Badge className="text-xs px-2 py-0.5 bg-[#F2F4F6] dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-[#E1E4E8] dark:border-[#3F3F46]">
+                              {activity.category}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                            {activity.detail}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Footer con metadata */}
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500 dark:text-gray-400 pt-3 border-t border-[#E1E4E8] dark:border-[#3F3F46]">
+                        <div className="flex items-center gap-1.5">
+                          <User className="h-3.5 w-3.5" />
+                          <span className="font-medium">{activity.user}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5" />
+                          <span>{activity.date}</span>
+                        </div>
+                        <div className="ml-auto">
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md font-medium ${activityData.bg} bg-opacity-10 text-${activityData.bg.replace('bg-', '')}`}>
+                            {activityData.label}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Indicador de hover */}
+                      <div className="absolute top-0 right-0 w-1 h-full bg-gradient-to-b from-[#2C3E50] to-[#34495E] transform scale-y-0 group-hover:scale-y-100 transition-transform origin-top rounded-r-xl"></div>
+                    </div>
+
+                    {/* Línea conectora (excepto el último) */}
+                    {index < activities.length - 1 && (
+                      <div className="absolute left-[23px] top-12 bottom-0 w-0.5 bg-[#E1E4E8] dark:bg-[#3F3F46]"></div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Footer con resumen */}
+          <div className="pt-4 border-t border-[#E1E4E8] dark:border-[#3F3F46]">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="text-center p-3 bg-[#2C3E50]/5 dark:bg-[#2C3E50]/20 rounded-lg border border-[#E1E4E8] dark:border-[#3F3F46]">
+                <div className="text-lg font-bold text-[#2C3E50] dark:text-gray-200">
+                  {activities.filter(a => a.type === 'upload').length}
+                </div>
+                <div className="text-xs text-gray-700 dark:text-gray-300">Documentos</div>
+              </div>
+              <div className="text-center p-3 bg-[#27AE60]/10 dark:bg-[#27AE60]/20 rounded-lg border border-[#27AE60]/30 dark:border-[#27AE60]/30">
+                <div className="text-lg font-bold text-[#27AE60] dark:text-[#27AE60]">
+                  {activities.filter(a => a.type === 'approval').length}
+                </div>
+                <div className="text-xs text-[#27AE60] dark:text-[#27AE60]">Aprobados</div>
+              </div>
+              <div className="text-center p-3 bg-[#F39C12]/10 dark:bg-[#F39C12]/20 rounded-lg border border-[#F39C12]/30 dark:border-[#F39C12]/30">
+                <div className="text-lg font-bold text-[#F39C12] dark:text-[#F39C12]">
+                  {activities.filter(a => a.type === 'comment').length}
+                </div>
+                <div className="text-xs text-[#F39C12] dark:text-[#F39C12]">Comentarios</div>
+              </div>
+              <div className="text-center p-3 bg-[#F2F4F6] dark:bg-[#27272A] rounded-lg border border-[#E1E4E8] dark:border-[#3F3F46]">
+                <div className="text-lg font-bold text-gray-600 dark:text-gray-400">
+                  {activities.filter(a => a.type === 'system').length}
+                </div>
+                <div className="text-xs text-gray-700 dark:text-gray-300">Sistema</div>
+              </div>
+            </div>
           </div>
         </div>
       );
@@ -1397,7 +1586,7 @@ const EmployeeManagement = () => {
     }, [selectedEmployee, documentStats, documents, activities, formatDate, getStatusIcon, getActivityIcon]);
 
     return (
-      <Dialog open={showEmployeeProfile} onOpenChange={setShowEmployeeProfile}>
+      <Dialog open={showEmployeeProfile} onOpenChange={setShowEmployeeProfile} modal={false}>
         <DialogContent className="max-w-[98vw] w-[95vw] sm:w-[85vw] h-[85vh] sm:h-[80vh] p-0 overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl">
           <DialogHeader className="sr-only">
             <DialogTitle>
@@ -1908,9 +2097,264 @@ const EmployeeManagement = () => {
       {/* Modal del perfil del empleado */}
       <EmployeeProfileModal />
 
+      {/* Modal de Subir Documento */}
+      {showUploadDocumentModal && (
+        <Dialog
+          open={showUploadDocumentModal}
+          onOpenChange={(open) => {
+            if (!open) {
+              // Solo cerrar si se clickea la X
+              setShowUploadDocumentModal(false);
+              setUploadDocumentForm({
+                employeeId: '',
+                documentType: '',
+                file: null,
+                approvalStatus: 'pendiente',
+                autoApprove: false,
+                notes: ''
+              });
+            }
+          }}
+        >
+          <DialogContent
+            className="max-w-2xl max-h-[90vh] overflow-y-auto"
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onInteractOutside={(e) => e.preventDefault()}
+          >
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <Upload className="h-6 w-6 text-[#1e40af]" />
+                Subir Documento de Empleado
+              </DialogTitle>
+              <DialogDescription>
+                Selecciona el empleado, tipo de documento y sube el archivo. Puedes aprobarlo directamente o dejarlo pendiente de revisión.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4">
+              {/* Selección de Empleado */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Seleccionar Empleado *
+                </Label>
+                <select
+                  value={uploadDocumentForm.employeeId}
+                  onChange={(e) => setUploadDocumentForm({ ...uploadDocumentForm, employeeId: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e40af] focus:border-[#1e40af] transition-all duration-200 bg-white/80 backdrop-blur-sm shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-500"
+                >
+                  <option value="">-- Seleccione un empleado --</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.first_name} {emp.last_name} - {emp.employee_id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tipo de Documento */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Tipo de Documento *
+                </Label>
+                <select
+                  value={uploadDocumentForm.documentType}
+                  onChange={(e) => setUploadDocumentForm({ ...uploadDocumentForm, documentType: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e40af] focus:border-[#1e40af] transition-all duration-200 bg-white/80 backdrop-blur-sm shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-500"
+                >
+                  <option value="">-- Seleccione tipo de documento --</option>
+                  <optgroup label="DOCUMENTOS ESTÁNDAR">
+                    <option value="contrato">Contrato de Trabajo</option>
+                    <option value="dpi">DPI Escaneado</option>
+                    <option value="certificado_medico">Certificado Médico</option>
+                    <option value="titulo_universitario">Título Universitario</option>
+                    <option value="antecedentes_penales">Antecedentes Penales</option>
+                    <option value="cv">Curriculum Vitae</option>
+                    <option value="referencias_laborales">Referencias Laborales</option>
+                    <option value="constancia_afiliacion_igss">Constancia Afiliación IGSS</option>
+                    <option value="carta_recomendacion">Carta de Recomendación</option>
+                  </optgroup>
+                  {customDocuments.length > 0 && (
+                    <optgroup label="DOCUMENTOS PERSONALIZADOS">
+                      {customDocuments.map((doc) => (
+                        <option key={doc.id} value={`custom_${doc.id}`}>
+                          {doc.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+
+              {/* Subir Archivo */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Archivo del Documento *
+                </Label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    onChange={(e) => setUploadDocumentForm({ ...uploadDocumentForm, file: e.target.files[0] })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e40af] focus:border-[#1e40af] transition-all duration-200 bg-white/80 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#1e40af] file:text-white hover:file:bg-[#1e3a8a] file:cursor-pointer"
+                  />
+                </div>
+                {uploadDocumentForm.file && (
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                    <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+                      {uploadDocumentForm.file.name}
+                    </span>
+                    <span className="text-xs text-blue-600 dark:text-blue-400 ml-auto">
+                      {(uploadDocumentForm.file.size / 1024).toFixed(2)} KB
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Estado de Aprobación */}
+              <div className="space-y-3 p-4 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-800/80 rounded-xl border-2 border-gray-200 dark:border-gray-700">
+                <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Estado del Documento
+                </Label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white/50 dark:bg-gray-700/30 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-sm">
+                    <input
+                      type="radio"
+                      name="approvalStatus"
+                      value="pendiente"
+                      checked={uploadDocumentForm.approvalStatus === 'pendiente'}
+                      onChange={(e) => setUploadDocumentForm({ ...uploadDocumentForm, approvalStatus: e.target.value, autoApprove: false })}
+                      className="w-4 h-4 text-[#1e40af] border-gray-300 focus:ring-[#1e40af] focus:ring-2"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-yellow-700 dark:text-yellow-400 flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        Pendiente de Revisión
+                      </span>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                        El documento quedará pendiente y deberá ser aprobado posteriormente
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white/50 dark:bg-gray-700/30 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-sm">
+                    <input
+                      type="radio"
+                      name="approvalStatus"
+                      value="aprobado"
+                      checked={uploadDocumentForm.approvalStatus === 'aprobado'}
+                      onChange={(e) => setUploadDocumentForm({ ...uploadDocumentForm, approvalStatus: e.target.value, autoApprove: true })}
+                      className="w-4 h-4 text-[#1e40af] border-gray-300 focus:ring-[#1e40af] focus:ring-2"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-green-700 dark:text-green-400 flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4" />
+                        Aprobar Automáticamente
+                      </span>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                        El documento será aprobado inmediatamente al subirlo
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Notas Adicionales */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Notas o Comentarios (Opcional)
+                </Label>
+                <textarea
+                  value={uploadDocumentForm.notes}
+                  onChange={(e) => setUploadDocumentForm({ ...uploadDocumentForm, notes: e.target.value })}
+                  placeholder="Agrega cualquier observación o comentario sobre este documento..."
+                  rows={3}
+                  className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e40af] focus:border-[#1e40af] transition-all duration-200 bg-white/80 resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Footer con botones */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowUploadDocumentModal(false);
+                  setUploadDocumentForm({
+                    employeeId: '',
+                    documentType: '',
+                    file: null,
+                    approvalStatus: 'pendiente',
+                    autoApprove: false,
+                    notes: ''
+                  });
+                }}
+                className="flex-1"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => {
+                  // Validaciones
+                  if (!uploadDocumentForm.employeeId) {
+                    toast.error('Por favor selecciona un empleado');
+                    return;
+                  }
+                  if (!uploadDocumentForm.documentType) {
+                    toast.error('Por favor selecciona el tipo de documento');
+                    return;
+                  }
+                  if (!uploadDocumentForm.file) {
+                    toast.error('Por favor selecciona un archivo');
+                    return;
+                  }
+
+                  // Aquí iría la lógica para subir el documento
+                  console.log('Subiendo documento:', uploadDocumentForm);
+
+                  // Mostrar mensaje de éxito
+                  toast.success(`Documento ${uploadDocumentForm.approvalStatus === 'aprobado' ? 'subido y aprobado' : 'subido y pendiente de revisión'} correctamente`);
+
+                  // Buscar el empleado seleccionado
+                  const empleadoSeleccionado = employees.find(emp => emp.id === uploadDocumentForm.employeeId);
+
+                  // Cerrar modal de subir documento
+                  setShowUploadDocumentModal(false);
+
+                  // Limpiar formulario
+                  setUploadDocumentForm({
+                    employeeId: '',
+                    documentType: '',
+                    file: null,
+                    approvalStatus: 'pendiente',
+                    autoApprove: false,
+                    notes: ''
+                  });
+
+                  // Abrir perfil del empleado en la pestaña de documentos
+                  if (empleadoSeleccionado) {
+                    setTimeout(() => {
+                      setSelectedEmployee(empleadoSeleccionado);
+                      setActiveProfileTab('documentos');
+                      setShowEmployeeProfile(true);
+                    }, 300); // Pequeño delay para que se cierre el modal anterior
+                  }
+                }}
+                className="flex-1 bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-md hover:shadow-lg transition-all"
+                disabled={!uploadDocumentForm.employeeId || !uploadDocumentForm.documentType || !uploadDocumentForm.file}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                {uploadDocumentForm.approvalStatus === 'aprobado' ? 'Subir y Aprobar' : 'Subir Documento'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Modal de Asignación de Documentos Requeridos */}
       {showDocumentsModal && selectedEmployeeForDocuments && (
-        <Dialog open={showDocumentsModal} onOpenChange={setShowDocumentsModal}>
+        <Dialog open={showDocumentsModal} onOpenChange={setShowDocumentsModal} modal={false}>
           <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -2435,7 +2879,7 @@ const EmployeeManagement = () => {
 
       {/* Modal para Crear Nuevo Tipo de Documento */}
       {showNewDocumentModal && (
-        <Dialog open={showNewDocumentModal} onOpenChange={setShowNewDocumentModal}>
+        <Dialog open={showNewDocumentModal} onOpenChange={setShowNewDocumentModal} modal={false}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -2731,7 +3175,7 @@ const EmployeeManagement = () => {
 
       {/* Modal Selector de Plantillas */}
       {showTemplateSelector && (
-        <Dialog open={showTemplateSelector} onOpenChange={setShowTemplateSelector}>
+        <Dialog open={showTemplateSelector} onOpenChange={setShowTemplateSelector} modal={false}>
           <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -2858,7 +3302,7 @@ const EmployeeManagement = () => {
 
       {/* Modal Crear Plantilla Personalizada */}
       {showCreateTemplateModal && (
-        <Dialog open={showCreateTemplateModal} onOpenChange={setShowCreateTemplateModal}>
+        <Dialog open={showCreateTemplateModal} onOpenChange={setShowCreateTemplateModal} modal={false}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
