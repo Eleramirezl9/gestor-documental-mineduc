@@ -39,6 +39,36 @@ export const createDocumentType = async (documentType) => {
   }
 };
 
+/**
+ * Actualizar tipo de documento
+ * @param {string} documentTypeId - ID del tipo de documento
+ * @param {Object} documentType - Datos actualizados
+ * @returns {Promise<Object>} Tipo de documento actualizado
+ */
+export const updateDocumentType = async (documentTypeId, documentType) => {
+  try {
+    const response = await api.put(`/employee-document-requirements/document-types/${documentTypeId}`, documentType);
+    return response.data.data;
+  } catch (error) {
+    console.error('Error actualizando tipo de documento:', error);
+    throw error;
+  }
+};
+
+/**
+ * Eliminar tipo de documento
+ * @param {string} documentTypeId - ID del tipo de documento
+ * @returns {Promise<void>}
+ */
+export const deleteDocumentType = async (documentTypeId) => {
+  try {
+    await api.delete(`/employee-document-requirements/document-types/${documentTypeId}`);
+  } catch (error) {
+    console.error('Error eliminando tipo de documento:', error);
+    throw error;
+  }
+};
+
 // ==================== PLANTILLAS ====================
 
 /**
@@ -96,6 +126,51 @@ export const createDocumentTemplate = async (template) => {
     return newTemplate;
   } catch (error) {
     console.error('Error creando plantilla:', error);
+    throw error;
+  }
+};
+
+/**
+ * Actualizar plantilla de documentos
+ * @param {string} templateId - ID de la plantilla
+ * @param {Object} template - Datos actualizados
+ * @returns {Promise<Object>} Plantilla actualizada
+ */
+export const updateDocumentTemplate = async (templateId, template) => {
+  try {
+    const response = await api.put(`/employee-document-requirements/templates/${templateId}`, template);
+    const updatedTemplate = response.data.data;
+
+    // Transformar estructura igual que en getDocumentTemplates
+    if (updatedTemplate.template_documents) {
+      updatedTemplate.documents = updatedTemplate.template_documents.map(td => ({
+        id: td.document_type?.id,
+        documentId: td.document_type?.id,
+        document_type_id: td.document_type?.id,
+        name: td.document_type?.name,
+        category: td.document_type?.category,
+        priority: td.priority || 'normal',
+        ...td.document_type
+      }));
+    }
+
+    return updatedTemplate;
+  } catch (error) {
+    console.error('Error actualizando plantilla:', error);
+    throw error;
+  }
+};
+
+/**
+ * Eliminar plantilla de documentos
+ * @param {string} templateId - ID de la plantilla
+ * @returns {Promise<void>}
+ */
+export const deleteDocumentTemplate = async (templateId) => {
+  try {
+    await api.delete(`/employee-document-requirements/templates/${templateId}`);
+  } catch (error) {
+    console.error('Error eliminando plantilla:', error);
     throw error;
   }
 };
@@ -181,6 +256,22 @@ export const updateRequiredDocument = async (requirementId, updates) => {
     return response.data.data;
   } catch (error) {
     console.error('Error actualizando documento:', error);
+    throw error;
+  }
+};
+
+/**
+ * Actualizar documento asignado a empleado
+ * @param {string} assignmentId - ID de la asignación
+ * @param {Object} updates - Datos a actualizar (priority, dueDate, notes)
+ * @returns {Promise<Object>} Documento actualizado
+ */
+export const updateAssignedDocument = async (assignmentId, updates) => {
+  try {
+    const response = await api.put(`/employee-document-requirements/${assignmentId}`, updates);
+    return response.data.data;
+  } catch (error) {
+    console.error('Error actualizando documento asignado:', error);
     throw error;
   }
 };
@@ -350,10 +441,17 @@ export default {
   // Tipos de documentos
   getDocumentTypes,
   createDocumentType,
+  updateDocumentType,
+  deleteDocumentType,
 
   // Plantillas
   getDocumentTemplates,
   createDocumentTemplate,
+  updateDocumentTemplate,
+  deleteDocumentTemplate,
+  createTemplate: createDocumentTemplate,
+  updateTemplate: updateDocumentTemplate,
+  deleteTemplate: deleteDocumentTemplate,
 
   // Asignación
   assignDocumentsToEmployee,
@@ -362,6 +460,7 @@ export default {
   // Documentos del empleado
   getEmployeeRequiredDocuments,
   updateRequiredDocument,
+  updateAssignedDocument,
   deleteRequiredDocument,
 
   // Subida de archivos
@@ -369,10 +468,6 @@ export default {
 
   // Estadísticas
   getDocumentStatistics,
-
-  // Crear nuevos tipos y plantillas
-  createDocumentType,
-  createTemplate: createDocumentTemplate,
 
   // Utilidades
   validateFile,

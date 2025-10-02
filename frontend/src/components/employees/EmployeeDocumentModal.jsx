@@ -17,13 +17,16 @@ import {
   Save,
   Package,
   AlertTriangle,
-  Calendar
+  Calendar,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { useEmployeeDocumentAssignment } from '../../hooks/useEmployeeDocumentAssignment';
 import { toast } from 'react-hot-toast';
 import CreateDocumentTypeModal from './CreateDocumentTypeModal';
 import CreateTemplateModal from './CreateTemplateModal';
 import TemplateSelectionModal from './TemplateSelectionModal';
+import EditAssignedDocumentModal from './EditAssignedDocumentModal';
 
 const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
   const {
@@ -38,8 +41,11 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
     handleRemoveDocumentItem,
     handleApplyTemplate,
     handleSaveDocumentAssignment,
+    handleUpdateAssignedDocument,
+    handleDeleteAssignedDocument,
     loadTemplates,
-    loadDocumentTypes
+    loadDocumentTypes,
+    loadAssignedDocuments
   } = useEmployeeDocumentAssignment(employee?.employee_id);
 
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
@@ -52,6 +58,10 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
 
   // Estado para el modal visual de plantillas
   const [showTemplateSelectionModal, setShowTemplateSelectionModal] = useState(false);
+
+  // Estado para el modal de edición de documento asignado
+  const [showEditAssignedModal, setShowEditAssignedModal] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState(null);
 
   // Calcular fecha de vencimiento por defecto (30 días desde hoy)
   const getDefaultDueDate = () => {
@@ -210,7 +220,7 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
                             )}
                           </div>
                           <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                            {document?.description}
+                            {document?.description || 'Sin descripción'}
                           </div>
                           <div className="space-y-1 text-xs">
                             <div className="flex items-center gap-4 text-gray-500">
@@ -218,10 +228,19 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
                                 assignment.priority === 'urgente' ? 'text-red-600' :
                                 assignment.priority === 'alta' ? 'text-orange-600' :
                                 'text-green-600'
-                              }`}>{assignment.priority}</span></span>
+                              }`}>{
+                                assignment.priority === 'urgente' ? 'Urgente' :
+                                assignment.priority === 'alta' ? 'Alta' :
+                                assignment.priority === 'baja' ? 'Baja' :
+                                'Normal'
+                              }</span></span>
                               {assignment.dueDate && (
                                 <span className={isOverdue ? 'text-red-600 font-medium' : ''}>
-                                  Vence: {new Date(assignment.dueDate).toLocaleDateString()}
+                                  Vence: {new Date(assignment.dueDate).toLocaleDateString('es-GT', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric'
+                                  })}
                                   {daysLeft !== null && ` (${daysLeft > 0 ? `${daysLeft} días` : 'Vencido'})`}
                                 </span>
                               )}
@@ -230,9 +249,48 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
                                 assignment.status === 'rechazado' ? 'text-red-600' :
                                 assignment.status === 'subido' ? 'text-blue-600' :
                                 'text-yellow-600'
-                              }`}>{assignment.status}</span></span>
+                              }`}>{
+                                assignment.status === 'aprobado' ? 'Aprobado' :
+                                assignment.status === 'rechazado' ? 'Rechazado' :
+                                assignment.status === 'subido' ? 'Subido' :
+                                assignment.status === 'pending' ? 'Pendiente' :
+                                assignment.status
+                              }</span></span>
                             </div>
                           </div>
+                        </div>
+
+                        {/* Botones de acción */}
+                        <div className="flex gap-1 ml-4">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingAssignment(assignment);
+                              setShowEditAssignedModal(true);
+                            }}
+                            className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            title="Editar documento"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              if (window.confirm(`¿Estás seguro de eliminar la asignación de "${document?.name}"?`)) {
+                                try {
+                                  await handleDeleteAssignedDocument(assignment.id);
+                                } catch (error) {
+                                  console.error('Error eliminando documento:', error);
+                                }
+                              }
+                            }}
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Eliminar documento"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -579,6 +637,7 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
         open={showTemplateSelectionModal}
         onOpenChange={setShowTemplateSelectionModal}
         templates={documentTemplates}
+        allAvailableDocuments={allAvailableDocuments}
         onSelectTemplate={(template) => {
           handleApplyTemplate(template);
           setSelectedTemplate(template);
@@ -588,6 +647,26 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
         onCreateNew={() => {
           setShowTemplateSelectionModal(false);
           setShowCreateTemplateModal(true);
+        }}
+        onTemplateDeleted={async (templateId) => {
+          // Recargar plantillas después de eliminar
+          await loadTemplates();
+        }}
+        onTemplateUpdated={async (updatedTemplate) => {
+          // Recargar plantillas después de actualizar
+          await loadTemplates();
+        }}
+      />
+
+      {/* Modal de edición de documento asignado */}
+      <EditAssignedDocumentModal
+        open={showEditAssignedModal}
+        onOpenChange={setShowEditAssignedModal}
+        assignment={editingAssignment}
+        onSuccess={async () => {
+          await loadAssignedDocuments();
+          setShowEditAssignedModal(false);
+          setEditingAssignment(null);
         }}
       />
     </Dialog>

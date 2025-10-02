@@ -261,6 +261,135 @@ router.post('/document-types',
 
 /**
  * @swagger
+ * /api/employee-document-requirements/document-types/{id}:
+ *   put:
+ *     summary: Actualizar tipo de documento
+ *     tags: [Employee Document Requirements]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.put('/document-types/:id',
+  verifyToken,
+  [
+    body('name').optional(),
+    body('category').optional(),
+    body('description').optional(),
+    body('required').isBoolean().optional(),
+    body('is_active').isBoolean().optional()
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { id } = req.params;
+      const updateData = {};
+
+      // Solo agregar campos que vienen en el body
+      if (req.body.name !== undefined) updateData.name = req.body.name;
+      if (req.body.category !== undefined) updateData.category = req.body.category;
+      if (req.body.description !== undefined) updateData.description = req.body.description;
+      if (req.body.required !== undefined) updateData.required = req.body.required;
+      if (req.body.is_active !== undefined) updateData.is_active = req.body.is_active;
+
+      console.log('📝 Actualizando tipo de documento:', id);
+
+      const { data, error } = await supabaseAdmin
+        .from('document_types')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error actualizando tipo de documento:', error);
+        throw error;
+      }
+
+      console.log('✅ Tipo de documento actualizado correctamente');
+
+      res.status(200).json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      console.error('Error actualizando tipo de documento:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error al actualizar tipo de documento',
+        message: error.message
+      });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/employee-document-requirements/document-types/{id}:
+ *   delete:
+ *     summary: Eliminar tipo de documento
+ *     tags: [Employee Document Requirements]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete('/document-types/:id',
+  verifyToken,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      console.log('🗑️ Eliminando tipo de documento:', id);
+
+      // Verificar si el tipo de documento está en uso
+      const { data: inUse, error: checkError } = await supabaseAdmin
+        .from('required_documents')
+        .select('id')
+        .eq('document_type', id)
+        .limit(1);
+
+      if (checkError) {
+        console.error('❌ Error verificando uso:', checkError);
+      }
+
+      if (inUse && inUse.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'No se puede eliminar este tipo de documento porque está siendo usado por documentos asignados'
+        });
+      }
+
+      // Eliminar el tipo de documento
+      const { error } = await supabaseAdmin
+        .from('document_types')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('❌ Error eliminando tipo de documento:', error);
+        throw error;
+      }
+
+      console.log('✅ Tipo de documento eliminado correctamente');
+
+      res.status(200).json({
+        success: true,
+        message: 'Tipo de documento eliminado correctamente'
+      });
+    } catch (error) {
+      console.error('Error eliminando tipo de documento:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error al eliminar tipo de documento',
+        message: error.message
+      });
+    }
+  }
+);
+
+/**
+ * @swagger
  * /api/employee-document-requirements/templates:
  *   get:
  *     summary: Obtener plantillas de documentos
@@ -418,6 +547,186 @@ router.post('/templates',
       res.status(500).json({
         success: false,
         error: 'Error al crear plantilla',
+        message: error.message
+      });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/employee-document-requirements/templates/{id}:
+ *   put:
+ *     summary: Actualizar plantilla de documentos
+ *     tags: [Employee Document Requirements]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.put('/templates/:id',
+  verifyToken,
+  [
+    body('name').optional(),
+    body('description').optional(),
+    body('category').optional(),
+    body('icon').optional(),
+    body('documents').isArray().optional()
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { id } = req.params;
+      const { name, description, category, icon, documents } = req.body;
+
+      console.log('📝 Actualizando plantilla:', id);
+
+      // Actualizar plantilla
+      const updateData = {};
+      if (name !== undefined) updateData.name = name;
+      if (description !== undefined) updateData.description = description;
+      if (category !== undefined) updateData.category = category;
+      if (icon !== undefined) updateData.icon = icon;
+
+      const { data: template, error: templateError } = await supabaseAdmin
+        .from('document_templates')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (templateError) {
+        console.error('❌ Error actualizando plantilla:', templateError);
+        throw templateError;
+      }
+
+      // Si se proporcionaron documentos, actualizar la relación
+      if (documents && Array.isArray(documents)) {
+        // Eliminar documentos existentes
+        await supabaseAdmin
+          .from('template_documents')
+          .delete()
+          .eq('template_id', id);
+
+        // Deduplica documentos
+        const uniqueDocuments = [];
+        const seenIds = new Set();
+        for (const doc of documents) {
+          if (!seenIds.has(doc.document_type_id)) {
+            seenIds.add(doc.document_type_id);
+            uniqueDocuments.push(doc);
+          }
+        }
+
+        // Insertar nuevos documentos
+        if (uniqueDocuments.length > 0) {
+          const templateDocuments = uniqueDocuments.map(doc => ({
+            template_id: id,
+            document_type_id: doc.document_type_id,
+            priority: doc.priority || 'normal'
+          }));
+
+          const { error: docsError } = await supabaseAdmin
+            .from('template_documents')
+            .insert(templateDocuments);
+
+          if (docsError) {
+            console.error('❌ Error actualizando documentos de plantilla:', docsError);
+            throw docsError;
+          }
+        }
+      }
+
+      // Obtener plantilla completa con documentos
+      const { data: fullTemplate, error: fetchError } = await supabaseAdmin
+        .from('document_templates')
+        .select(`
+          *,
+          template_documents (
+            *,
+            document_type:document_types (*)
+          )
+        `)
+        .eq('id', id)
+        .single();
+
+      if (fetchError) {
+        console.error('⚠️ Error obteniendo plantilla completa:', fetchError);
+        return res.status(200).json({
+          success: true,
+          data: template
+        });
+      }
+
+      console.log('✅ Plantilla actualizada correctamente');
+
+      res.status(200).json({
+        success: true,
+        data: fullTemplate
+      });
+    } catch (error) {
+      console.error('Error actualizando plantilla:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error al actualizar plantilla',
+        message: error.message
+      });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/employee-document-requirements/templates/{id}:
+ *   delete:
+ *     summary: Eliminar plantilla de documentos
+ *     tags: [Employee Document Requirements]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete('/templates/:id',
+  verifyToken,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      console.log('🗑️ Eliminando plantilla:', id);
+
+      // Primero eliminar los documentos de la plantilla
+      const { error: docsError } = await supabaseAdmin
+        .from('template_documents')
+        .delete()
+        .eq('template_id', id);
+
+      if (docsError) {
+        console.error('❌ Error eliminando documentos de plantilla:', docsError);
+        throw docsError;
+      }
+
+      // Luego eliminar la plantilla
+      const { error: templateError } = await supabaseAdmin
+        .from('document_templates')
+        .delete()
+        .eq('id', id);
+
+      if (templateError) {
+        console.error('❌ Error eliminando plantilla:', templateError);
+        throw templateError;
+      }
+
+      console.log('✅ Plantilla eliminada correctamente');
+
+      res.status(200).json({
+        success: true,
+        message: 'Plantilla eliminada correctamente'
+      });
+    } catch (error) {
+      console.error('Error eliminando plantilla:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error al eliminar plantilla',
         message: error.message
       });
     }
@@ -609,19 +918,42 @@ router.put('/:id',
       }
 
       const { id } = req.params;
-      const updateData = req.body;
+      const { priority, dueDate, status, notes } = req.body;
 
-      const { data, error } = await supabase
+      // Preparar datos para actualización (mapear a estructura de DB)
+      const updateData = {};
+
+      if (priority !== undefined) {
+        // Mapear prioridad al formato antiguo (high/medium/low)
+        updateData.priority = priority === 'urgente' ? 'high' :
+                               priority === 'alta' ? 'high' :
+                               priority === 'normal' ? 'medium' : 'low';
+      }
+
+      if (dueDate !== undefined) {
+        updateData.required_date = dueDate;
+      }
+
+      if (status !== undefined) {
+        updateData.status = status;
+      }
+
+      if (notes !== undefined) {
+        updateData.description = notes;
+      }
+
+      console.log('🔄 Actualizando documento requerido:', id, updateData);
+
+      const { data, error } = await supabaseAdmin
         .from('employee_document_requirements')
         .update(updateData)
         .eq('id', id)
-        .select(`
-          *,
-          document_type:document_types (*)
-        `)
+        .select('*')
         .single();
 
       if (error) throw error;
+
+      console.log('✅ Documento actualizado correctamente');
 
       res.json({
         success: true,
@@ -652,7 +984,7 @@ router.delete('/:id', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('employee_document_requirements')
       .delete()
       .eq('id', id);
