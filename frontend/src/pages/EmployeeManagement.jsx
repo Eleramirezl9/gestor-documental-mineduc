@@ -6,6 +6,10 @@ import api, { employeesAPI } from '../lib/api';
 import EmployeeReportSimple from '../components/reports/EmployeeReportSimple';
 import useCanvasPDFGenerator from '../hooks/useCanvasPDFGenerator';
 import usePDFGenerator from '../hooks/usePDFGenerator';
+import DocumentAssignmentModal from '../components/employees/DocumentAssignmentModal';
+import EmployeeDocumentModal from '../components/employees/EmployeeDocumentModal';
+import { useEmployeeDocuments } from '../hooks/useEmployeeDocuments';
+import { useEmployeeDocumentAssignment } from '../hooks/useEmployeeDocumentAssignment';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -91,8 +95,29 @@ const EmployeeManagement = () => {
   // Estados para asignación de documentos requeridos
   const [showDocumentsModal, setShowDocumentsModal] = useState(false);
   const [selectedEmployeeForDocuments, setSelectedEmployeeForDocuments] = useState(null);
-  const [documentItems, setDocumentItems] = useState([]);
-  const [assignedDocuments, setAssignedDocuments] = useState([]);
+
+  // Hook con API real para gestión de documentos del empleado seleccionado
+  const {
+    allAvailableDocuments: allAvailableDocumentsFromAPI,
+    documentTemplates: documentTemplatesFromAPI,
+    assignedDocuments: assignedDocumentsFromAPI,
+    documentItems: documentItemsFromHook,
+    loading: loadingDocuments,
+    handleAddDocumentItem: handleAddDocumentItemFromHook,
+    handleUpdateDocumentItem: handleUpdateDocumentItemFromHook,
+    handleRemoveDocumentItem: handleRemoveDocumentItemFromHook,
+    handleApplyTemplate: handleApplyTemplateFromHook,
+    handleAssignTemplateDirectly,
+    handleSaveDocumentAssignment: handleSaveDocumentAssignmentFromHook,
+    handleUpdateAssignedDocument,
+    handleDeleteAssignedDocument,
+    setDocumentItems: setDocumentItemsFromHook
+  } = useEmployeeDocumentAssignment(selectedEmployeeForDocuments?.employee_id);
+
+  // Compatibilidad con código existente: usar datos de API si están disponibles, sino usar mock
+  const documentItems = documentItemsFromHook;
+  const setDocumentItems = setDocumentItemsFromHook;
+  const assignedDocuments = assignedDocumentsFromAPI.length > 0 ? assignedDocumentsFromAPI : [];
 
   // Estados para modal de subir documento
   const [showUploadDocumentModal, setShowUploadDocumentModal] = useState(false);
@@ -115,6 +140,10 @@ const EmployeeManagement = () => {
   const [showTemplateManager, setShowTemplateManager] = useState(false);
   const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
   const [customTemplates, setCustomTemplates] = useState([]);
+
+  // Estados para nuevo modal de asignación (API real)
+  const [showNewAssignmentModal, setShowNewAssignmentModal] = useState(false);
+  const [employeeForNewAssignment, setEmployeeForNewAssignment] = useState(null);
   const [newTemplateForm, setNewTemplateForm] = useState({
     name: '',
     description: '',
@@ -559,42 +588,9 @@ const EmployeeManagement = () => {
   const handleOpenDocumentsModal = (employee, e) => {
     e.stopPropagation(); // Evita que se abra el perfil del empleado
     setSelectedEmployeeForDocuments(employee);
-    // Cargar documentos ya asignados al empleado (simulado)
-    const existingAssignments = [
-      {
-        id: 1,
-        documentId: 2, // DPI - no vence
-        assignedDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000), // hace 15 días
-        status: 'asignado',
-        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 días
-        uploadedFile: 'DPI_Juan_Perez.pdf',
-        uploadStatus: 'subido',
-        uploadDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) // subido hace 10 días
-      },
-      {
-        id: 2,
-        documentId: 10, // Certificado Médico - vence en 12 meses
-        assignedDate: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000), // hace 60 días
-        status: 'asignado',
-        dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000), // 15 días
-        uploadedFile: 'Certificado_Medico_2024.pdf',
-        uploadStatus: 'subido',
-        uploadDate: new Date(Date.now() - 330 * 24 * 60 * 60 * 1000) // subido hace 330 días (cerca del vencimiento)
-      },
-      {
-        id: 3,
-        documentId: 5, // Antecedentes Penales - vence en 12 meses
-        assignedDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // hace 30 días
-        status: 'asignado',
-        dueDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000), // 45 días
-        uploadedFile: null,
-        uploadStatus: 'pendiente'
-      }
-    ];
-    setAssignedDocuments(existingAssignments);
-    setDocumentItems([]);
     setSelectedTemplate(null); // Limpiar plantilla seleccionada
     setShowDocumentsModal(true);
+    // Los datos se cargan automáticamente por el hook useEmployeeDocumentAssignment
   };
 
   // Función para obtener iconos SVG
@@ -657,23 +653,8 @@ const EmployeeManagement = () => {
 
   // Función para aplicar una plantilla
   const handleApplyTemplate = (template) => {
-    const today = new Date().toISOString().split('T')[0];
-    const defaultDueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    const templateItems = template.documents.map(templateDoc => ({
-      id: Date.now() + Math.random(),
-      documentId: templateDoc.documentId.toString(),
-      assignedDate: today,
-      dueDate: defaultDueDate,
-      status: 'pendiente',
-      priority: templateDoc.priority,
-      notes: `Aplicado desde plantilla: ${template.name}`,
-      hasCustomRenewal: templateDoc.hasCustomRenewal || false,
-      customRenewalPeriod: templateDoc.customRenewalPeriod || 12,
-      customRenewalUnit: templateDoc.customRenewalUnit || 'months'
-    }));
-
-    setDocumentItems(templateItems);
+    // Usar función del hook que se conecta con la API real
+    handleApplyTemplateFromHook(template);
     setSelectedTemplate(template);
     setShowTemplateSelector(false);
   };
@@ -767,23 +748,14 @@ const EmployeeManagement = () => {
   };
 
   // Combinar plantillas predefinidas y personalizadas
-  const allTemplates = [...documentTemplates, ...customTemplates];
+  // Usar datos de API real si están disponibles, sino fallback a mock
+  const allTemplates = documentTemplatesFromAPI.length > 0
+    ? documentTemplatesFromAPI
+    : [...documentTemplates, ...customTemplates];
 
   const handleAddDocumentItem = () => {
-    const newItem = {
-      id: Date.now(),
-      documentId: '',
-      assignedDate: new Date().toISOString().split('T')[0],
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 días por defecto
-      status: 'pendiente',
-      priority: 'normal',
-      notes: '',
-      // Campos editables de renovación
-      hasCustomRenewal: false,
-      customRenewalPeriod: 12,
-      customRenewalUnit: 'months'
-    };
-    setDocumentItems([...documentItems, newItem]);
+    // Usar función del hook que se conecta con la API
+    handleAddDocumentItemFromHook();
     // Si había una plantilla aplicada y ahora se añaden documentos manualmente, limpiar la selección
     if (selectedTemplate && documentItems.length > 0) {
       setSelectedTemplate(null);
@@ -791,31 +763,13 @@ const EmployeeManagement = () => {
   };
 
   const handleUpdateDocumentItem = (id, field, value) => {
-    setDocumentItems(items =>
-      items.map(item => {
-        if (item.id === id) {
-          const updatedItem = { ...item, [field]: value };
-
-          // Si se cambió el documento seleccionado, inicializar configuración de renovación
-          if (field === 'documentId' && value) {
-            const selectedDocument = allAvailableDocuments.find(d => d.id === parseInt(value));
-            if (selectedDocument) {
-              // Inicializar con la configuración por defecto del documento
-              updatedItem.hasCustomRenewal = selectedDocument.hasExpiration;
-              updatedItem.customRenewalPeriod = selectedDocument.renewalPeriod || 12;
-              updatedItem.customRenewalUnit = selectedDocument.renewalUnit || 'months';
-            }
-          }
-
-          return updatedItem;
-        }
-        return item;
-      })
-    );
+    // Usar función del hook que se conecta con la API
+    handleUpdateDocumentItemFromHook(id, field, value);
   };
 
   const handleRemoveDocumentItem = (id) => {
-    setDocumentItems(items => items.filter(item => item.id !== id));
+    // Usar función del hook que se conecta con la API
+    handleRemoveDocumentItemFromHook(id);
   };
 
   const handleFileUpload = async (documentAssignmentId, file) => {
@@ -852,33 +806,14 @@ const EmployeeManagement = () => {
   };
 
   const handleSaveDocumentAssignment = async () => {
-    if (!selectedEmployeeForDocuments || documentItems.length === 0) {
-      toast.error('Debe agregar al menos un documento requerido');
-      return;
-    }
+    // Usar función del hook que se conecta con la API real
+    const success = await handleSaveDocumentAssignmentFromHook();
 
-    // Validar que todos los items tengan documento seleccionado
-    const invalidItems = documentItems.filter(item => !item.documentId);
-    if (invalidItems.length > 0) {
-      toast.error('Todos los elementos deben tener un documento seleccionado');
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      // Aquí iría la llamada a la API para guardar la asignación
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      toast.success(`Documentos requeridos asignados exitosamente a ${selectedEmployeeForDocuments.first_name} ${selectedEmployeeForDocuments.last_name}`);
+    if (success) {
+      // Cerrar modal y limpiar estado solo si la asignación fue exitosa
       setShowDocumentsModal(false);
-      setDocumentItems([]);
       setSelectedEmployeeForDocuments(null);
-    } catch (error) {
-      console.error('Error asignando documentos:', error);
-      toast.error('Error al asignar documentos requeridos');
-    } finally {
-      setLoading(false);
+      setSelectedTemplate(null);
     }
   };
 
@@ -966,7 +901,10 @@ const EmployeeManagement = () => {
   };
 
   // Combinar documentos predefinidos con documentos personalizados
-  const allAvailableDocuments = [...availableDocuments, ...customDocuments];
+  // Usar datos de API real si están disponibles, sino fallback a mock
+  const allAvailableDocuments = allAvailableDocumentsFromAPI.length > 0
+    ? allAvailableDocumentsFromAPI
+    : [...availableDocuments, ...customDocuments];
 
   // Funciones para manejo de vencimientos
   const calculateExpirationDate = (uploadDate, document) => {
@@ -2613,577 +2551,16 @@ const EmployeeManagement = () => {
         </Dialog>
       )}
 
-      {/* Modal de Asignación de Documentos Requeridos */}
-      {showDocumentsModal && selectedEmployeeForDocuments && (
-        <Dialog open={showDocumentsModal} onOpenChange={setShowDocumentsModal} modal={false}>
-          <DialogContent
-            className="max-w-5xl max-h-[90vh] overflow-hidden"
-            onPointerDownOutside={(e) => e.preventDefault()}
-            onInteractOutside={(e) => e.preventDefault()}
-          >
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-blue-600" />
-                Asignar Documentos Requeridos a {selectedEmployeeForDocuments.first_name} {selectedEmployeeForDocuments.last_name}
-              </DialogTitle>
-              <DialogDescription>
-                Gestiona los documentos requeridos para el empleado. Puedes ver los documentos ya asignados, agregar nuevos requisitos y gestionar la subida de archivos.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="flex flex-col space-y-6 max-h-[70vh] overflow-y-auto">
-              {/* Informacion del Empleado */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium text-blue-700 dark:text-blue-300">Empleado:</span>
-                    <div className="text-gray-900 dark:text-white">
-                      {selectedEmployeeForDocuments.first_name} {selectedEmployeeForDocuments.last_name}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="font-medium text-blue-700 dark:text-blue-300">Departamento:</span>
-                    <div className="text-gray-900 dark:text-white">{selectedEmployeeForDocuments.department}</div>
-                  </div>
-                  <div>
-                    <span className="font-medium text-blue-700 dark:text-blue-300">ID:</span>
-                    <div className="text-gray-900 dark:text-white font-mono">{selectedEmployeeForDocuments.employee_id}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Documentos ya Asignados */}
-              {assignedDocuments.length > 0 && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                    Documentos Actualmente Asignados
-                  </h3>
-                  <div className="space-y-3">
-                    {assignedDocuments.map((assignment) => {
-                      const document = allAvailableDocuments.find(d => d.id === assignment.documentId);
-                      const isOverdue = new Date(assignment.dueDate) < new Date();
-                      const daysLeft = Math.ceil((new Date(assignment.dueDate) - new Date()) / (1000 * 60 * 60 * 24));
-
-                      // Calcular fecha de vencimiento del documento si está subido
-                      const expirationDate = assignment.uploadDate ? calculateExpirationDate(assignment.uploadDate, document) : null;
-                      const expirationStatus = getExpirationStatus(expirationDate);
-
-                      return (
-                        <div key={assignment.id} className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <div className="font-medium text-gray-900 dark:text-white">
-                                  {document?.name || 'Documento no encontrado'}
-                                </div>
-                                {document?.required && (
-                                  <Badge variant="destructive" className="text-xs">Obligatorio</Badge>
-                                )}
-                                {document?.hasExpiration && (
-                                  <Badge variant="outline" className="text-xs bg-orange-100 text-orange-800 border-orange-300">
-                                    Renovacion: {formatRenewalPeriod(document)}
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                                {document?.description}
-                              </div>
-                              <div className="space-y-1 text-xs">
-                                <div className="flex items-center gap-4 text-gray-500">
-                                  <span>Asignado: {assignment.assignedDate.toLocaleDateString('es-GT')}</span>
-                                  <span className={isOverdue ? 'text-red-600 font-medium' : daysLeft <= 7 ? 'text-orange-600 font-medium' : ''}>
-                                    Vence: {new Date(assignment.dueDate).toLocaleDateString('es-GT')}
-                                    {!isOverdue && ` (${daysLeft} días)`}
-                                  </span>
-                                </div>
-                                {/* Informacion de vencimiento del documento */}
-                                {expirationDate && expirationStatus && (
-                                  <div className={`flex items-center gap-1 font-medium ${
-                                    expirationStatus.color === 'red' ? 'text-red-600' :
-                                    expirationStatus.color === 'orange' ? 'text-orange-600' : 'text-green-600'
-                                  }`}>
-                                    <span className="flex items-center gap-1">
-                                      {getTemplateIcon('document', 'h-3 w-3')}
-                                      Documento: {expirationStatus.message}
-                                    </span>
-                                    <span className="text-gray-500 font-normal">
-                                      (Vence: {expirationDate.toLocaleDateString('es-GT')})
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {/* Badge de estado */}
-                              <Badge
-                                variant={assignment.uploadStatus === 'subido' ? 'default' : isOverdue ? 'destructive' : 'secondary'}
-                                className="text-xs"
-                              >
-                                {assignment.uploadStatus === 'subido' ? 'Subido' : isOverdue ? 'Vencido' : 'Pendiente'}
-                              </Badge>
-
-                              {/* Botones de acción */}
-                              <div className="flex gap-1 ml-2">
-                                {/* Botón Actualizar/Resubir - solo si ya está subido */}
-                                {assignment.uploadStatus === 'subido' && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleUpdateDocument(assignment.id)}
-                                    className="h-8 w-8 p-0 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                                    title="Actualizar documento"
-                                  >
-                                    <Upload className="h-4 w-4 text-blue-600" />
-                                  </Button>
-                                )}
-
-                                {/* Botón Editar */}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleEditDocument(assignment)}
-                                  className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
-                                  title="Editar requisitos"
-                                >
-                                  <Edit className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                                </Button>
-
-                                {/* Botón Eliminar */}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setDeleteDocumentDialog({
-                                    open: true,
-                                    documentId: assignment.id,
-                                    documentName: document?.name || 'Documento'
-                                  })}
-                                  className="h-8 w-8 p-0 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                  title="Eliminar documento"
-                                >
-                                  <Trash2 className="h-4 w-4 text-red-600" />
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Área de subida de documentos */}
-                          <div className="border-t border-gray-200 dark:border-gray-600 pt-3">
-                            {assignment.uploadStatus === 'subido' ? (
-                              <div className="flex items-center gap-2 text-sm text-green-600">
-                                <CheckCircle className="h-4 w-4" />
-                                <span>Archivo: {assignment.uploadedFile}</span>
-                                <span className="text-gray-500">
-                                  • Subido: {assignment.uploadDate?.toLocaleDateString('es-GT')}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <label
-                                  htmlFor={`file-upload-${assignment.id}`}
-                                  className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-md cursor-pointer transition-colors"
-                                >
-                                  <Upload className="h-4 w-4" />
-                                  Subir Documento
-                                </label>
-                                <input
-                                  id={`file-upload-${assignment.id}`}
-                                  type="file"
-                                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                                  onChange={(e) => {
-                                    const file = e.target.files[0];
-                                    if (file) {
-                                      handleFileUpload(assignment.id, file);
-                                    }
-                                  }}
-                                  className="hidden"
-                                />
-                                <span className="text-xs text-gray-500">
-                                  PDF, DOC, DOCX, JPG, PNG (máx. 10MB)
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Nuevos Documentos Requeridos */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <PlusCircle className="h-5 w-5 text-blue-600" />
-                    Asignar Nuevos Documentos Requeridos
-                  </h3>
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => setShowTemplateSelector(true)}
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2 text-purple-600 border-purple-300 hover:bg-purple-50"
-                    >
-                      {getTemplateIcon('template', 'h-4 w-4')}
-                      Usar Plantilla
-                    </Button>
-                    <Button
-                      onClick={handleAddDocumentItem}
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2"
-                    >
-                      <PlusCircle className="h-4 w-4" />
-                      Agregar Documento
-                    </Button>
-                  </div>
-                </div>
-
-                {documentItems.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
-                    <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                    <p>No hay documentos agregados</p>
-                    <p className="text-sm">Haz clic en "Agregar Documento" o "Usar Plantilla" para comenzar</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {/* Indicador de plantilla aplicada */}
-                    {selectedTemplate && (
-                      <div className="p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          {getTemplateIcon(selectedTemplate.icon, 'h-5 w-5 text-purple-600')}
-                          <span className="font-medium text-purple-800 dark:text-purple-200">
-                            Plantilla aplicada: {selectedTemplate.name}
-                          </span>
-                          <Badge variant="outline" className="text-xs bg-purple-100 text-purple-800 border-purple-300">
-                            {selectedTemplate.documents.length} documentos
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-purple-700 dark:text-purple-300 mt-1">
-                          {selectedTemplate.description}. Puedes editar individualmente cada documento si es necesario.
-                        </p>
-                      </div>
-                    )}
-                    {documentItems.map((item, index) => {
-                      const selectedDoc = allAvailableDocuments.find(d => d.id === parseInt(item.documentId));
-                      const isDocumentSelected = !!item.documentId;
-
-                      return (
-                        <div key={item.id} className="relative p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-800/80 shadow-sm hover:shadow-md transition-all duration-200">
-                        {/* Header del documento con indicador de estado */}
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                              isDocumentSelected ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
-                            }`}>
-                              {index + 1}
-                            </div>
-                            <div>
-                              <h4 className="font-medium text-gray-900 dark:text-white">
-                                {selectedDoc ? selectedDoc.name : 'Documento sin configurar'}
-                              </h4>
-                              {selectedDoc && (
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                  {selectedDoc.category} • {selectedDoc.required ? 'Obligatorio' : 'Opcional'}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {isDocumentSelected && (
-                              <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                item.priority === 'urgente' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                                item.priority === 'alta' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
-                                'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                              }`}>
-                                Prioridad {item.priority}
-                              </div>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveDocumentItem(item.id)}
-                              className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                            >
-                              <Minus className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                        {/* Configuracion principal en grid responsivo */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Seleccionar Documento
-                            </Label>
-                            <select
-                              value={item.documentId}
-                              onChange={(e) => {
-                                if (e.target.value === 'create_new') {
-                                  handleOpenNewDocumentModal();
-                                } else if (e.target.value === 'create_template') {
-                                  setShowCreateTemplateModal(true);
-                                } else if (e.target.value === 'save_as_template') {
-                                  if (documentItems.length > 0) {
-                                    handleCreateTemplateFromCurrent();
-                                  }
-                                } else if (e.target.value.startsWith('template-')) {
-                                  // Selección de plantilla
-                                  const templateId = parseInt(e.target.value.replace('template-', ''));
-                                  const template = allTemplates.find(t => t.id === templateId);
-                                  if (template) {
-                                    handleApplyTemplate(template);
-                                  }
-                                } else {
-                                  handleUpdateDocumentItem(item.id, 'documentId', e.target.value);
-                                }
-                                // Resetear el selector después de las acciones
-                                if (['create_new', 'create_template', 'save_as_template'].includes(e.target.value)) {
-                                  e.target.value = '';
-                                }
-                              }}
-                              className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white/80 backdrop-blur-sm shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-500"
-                            >
-                                <option value="">Seleccionar documento...</option>
-
-                                {/* Plantillas de documentos */}
-                                <optgroup label="PLANTILLAS POR CARGO">
-                                  {allTemplates.map((template) => (
-                                    <option key={`template-${template.id}`} value={`template-${template.id}`}>
-                                      {template.isCustom ? '[Personalizada] ' : ''}Plantilla: {template.name} ({template.documents.length} documentos)
-                                    </option>
-                                  ))}
-                                </optgroup>
-
-                                {/* Documentos predefinidos */}
-                                <optgroup label="DOCUMENTOS INDIVIDUALES">
-                                  {availableDocuments.map((document) => (
-                                    <option key={document.id} value={document.id}>
-                                      {document.name} {document.required ? '(Obligatorio)' : '(Opcional)'}
-                                    </option>
-                                  ))}
-                                </optgroup>
-
-                                {/* Documentos personalizados */}
-                                {customDocuments.length > 0 && (
-                                  <optgroup label="DOCUMENTOS PERSONALIZADOS">
-                                    {customDocuments.map((document) => (
-                                      <option key={document.id} value={document.id}>
-                                        {document.name} {document.required ? '(Obligatorio)' : '(Opcional)'} [Personalizado]
-                                      </option>
-                                    ))}
-                                  </optgroup>
-                                )}
-
-                                {/* Opciones de creación */}
-                                <optgroup label="ACCIONES">
-                                  <option value="create_new">+ Crear nuevo tipo de documento...</option>
-                                  <option value="create_template">+ Crear mi plantilla personalizada...</option>
-                                </optgroup>
-                              </select>
-                            </div>
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Nivel de Prioridad
-                            </Label>
-                            <div className="space-y-2">
-                              {['normal', 'alta', 'urgente'].map((priority) => (
-                                <label key={priority} className="flex items-center gap-3 cursor-pointer p-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white/50 dark:bg-gray-700/30 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-sm">
-                                  <input
-                                    type="radio"
-                                    name={`priority-${item.id}`}
-                                    value={priority}
-                                    checked={item.priority === priority}
-                                    onChange={(e) => handleUpdateDocumentItem(item.id, 'priority', e.target.value)}
-                                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-2"
-                                  />
-                                  <span className={`text-sm font-medium flex-1 ${
-                                    priority === 'urgente' ? 'text-red-600 dark:text-red-400' :
-                                    priority === 'alta' ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'
-                                  }`}>
-                                    {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                                  </span>
-                                  {item.priority === priority && (
-                                    <div className={`w-2 h-2 rounded-full ${
-                                      priority === 'urgente' ? 'bg-red-500' :
-                                      priority === 'alta' ? 'bg-orange-500' : 'bg-green-500'
-                                    }`}></div>
-                                  )}
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Informacion adicional del documento seleccionado */}
-                        {selectedDoc && (
-                          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-                            <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200 text-sm">
-                              {getTemplateIcon('lightbulb', 'h-4 w-4')}
-                              <strong>Informacion del documento:</strong>
-                            </div>
-                            <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                              {selectedDoc.description}
-                            </p>
-                            <div className="flex items-center gap-4 mt-2 text-xs text-blue-600 dark:text-blue-400">
-                              <span>Categoría: <strong>{selectedDoc.category}</strong></span>
-                              <span>Tipo: <strong>{selectedDoc.required ? 'Obligatorio' : 'Opcional'}</strong></span>
-                              {selectedDoc.hasExpiration && (
-                                <span>Renovacion: <strong>Cada {selectedDoc.renewalPeriod} {
-                                  selectedDoc.renewalUnit === 'days' ? 'días' :
-                                  selectedDoc.renewalUnit === 'weeks' ? 'semanas' :
-                                  selectedDoc.renewalUnit === 'months' ? 'meses' : 'años'
-                                }</strong></span>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Configuracion de fechas y notas */}
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Fecha de Asignación
-                              </Label>
-                              <input
-                                type="date"
-                                value={item.assignedDate}
-                                onChange={(e) => handleUpdateDocumentItem(item.id, 'assignedDate', e.target.value)}
-                                className="w-full mt-1 px-4 py-3 border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-sm [color-scheme:light] dark:[color-scheme:dark]"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Fecha Límite
-                              </Label>
-                              <input
-                                type="date"
-                                value={item.dueDate}
-                                onChange={(e) => handleUpdateDocumentItem(item.id, 'dueDate', e.target.value)}
-                                className="w-full mt-1 px-4 py-3 border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-sm [color-scheme:light] dark:[color-scheme:dark]"
-                              />
-                            </div>
-                          </div>
-
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Notas adicionales (opcional)
-                            </Label>
-                            <Input
-                              placeholder="Instrucciones específicas o comentarios..."
-                              value={item.notes}
-                              onChange={(e) => handleUpdateDocumentItem(item.id, 'notes', e.target.value)}
-                              className="mt-1 !h-auto px-4 py-3 border-2 border-gray-200 dark:border-gray-600 !bg-white dark:!bg-gray-700 text-gray-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-sm"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Tercera sección: Configuracion de renovación */}
-                        {item.documentId && (() => {
-                        const selectedDoc = allAvailableDocuments.find(d => d.id === parseInt(item.documentId));
-                        if (selectedDoc?.hasExpiration) {
-                          return (
-                            <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-700">
-                              <h4 className="text-sm font-medium text-orange-800 dark:text-orange-200 mb-3 flex items-center gap-2">
-                                {getTemplateIcon('refresh', 'h-4 w-4')}
-                                Configuracion de Renovacion para este Empleado
-                              </h4>
-
-                              <div className="space-y-3">
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    id={`renewal-${item.id}`}
-                                    checked={item.hasCustomRenewal}
-                                    onChange={(e) => handleUpdateDocumentItem(item.id, 'hasCustomRenewal', e.target.checked)}
-                                    className="rounded"
-                                  />
-                                  <Label htmlFor={`renewal-${item.id}`} className="text-sm">
-                                    Este documento requiere renovación periódica para este empleado
-                                  </Label>
-                                </div>
-
-                                {item.hasCustomRenewal && (
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-6">
-                                    <div>
-                                      <Label className="text-sm font-medium">Período de Renovacion</Label>
-                                      <div className="flex gap-2 mt-1">
-                                        <Input
-                                          type="number"
-                                          min="1"
-                                          max="120"
-                                          value={item.customRenewalPeriod}
-                                          onChange={(e) => handleUpdateDocumentItem(item.id, 'customRenewalPeriod', parseInt(e.target.value) || 1)}
-                                          className="flex-1"
-                                        />
-                                        <select
-                                          value={item.customRenewalUnit}
-                                          onChange={(e) => handleUpdateDocumentItem(item.id, 'customRenewalUnit', e.target.value)}
-                                          className="px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        >
-                                          <option value="days">Días</option>
-                                          <option value="weeks">Semanas</option>
-                                          <option value="months">Meses</option>
-                                          <option value="years">Años</option>
-                                        </select>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-end">
-                                      <div className="text-sm text-orange-700 dark:text-orange-300 p-2 bg-orange-100 dark:bg-orange-900/30 rounded">
-                                        <strong>Renovacion personalizada:</strong> Cada {item.customRenewalPeriod} {
-                                          item.customRenewalUnit === 'days' ? 'días' :
-                                          item.customRenewalUnit === 'weeks' ? 'semanas' :
-                                          item.customRenewalUnit === 'months' ? 'meses' : 'años'
-                                        }
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-
-                                <div className="text-xs text-orange-600 dark:text-orange-400 flex items-start gap-1">
-                                  {getTemplateIcon('lightbulb', 'h-3 w-3 mt-0.5 flex-shrink-0')}
-                                  <span><strong>Por defecto:</strong> {selectedDoc.name} se renueva cada {selectedDoc.renewalPeriod} {
-                                    selectedDoc.renewalUnit === 'days' ? 'días' :
-                                    selectedDoc.renewalUnit === 'weeks' ? 'semanas' :
-                                    selectedDoc.renewalUnit === 'months' ? 'meses' : 'años'
-                                  }. Puedes personalizar el período para este empleado específico.</span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
-                      </div>
-                    );
-                  })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Botones de Acción */}
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button
-                variant="outline"
-                onClick={() => setShowDocumentsModal(false)}
-                disabled={loading}
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleSaveDocumentAssignment}
-                disabled={loading || documentItems.length === 0}
-                className="flex items-center gap-2"
-              >
-                <Save className="h-4 w-4" />
-                {loading ? 'Guardando...' : 'Asignar Documentos'}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+      {/* Modal de Asignación de Documentos Requeridos - Conectado con API Real */}
+      <EmployeeDocumentModal
+        open={showDocumentsModal}
+        onOpenChange={setShowDocumentsModal}
+        employee={selectedEmployeeForDocuments}
+        onSuccess={() => {
+          console.log("Documentos asignados exitosamente");
+          // Opcional: Recargar datos del empleado si es necesario
+        }}
+      />
 
       {/* AlertDialog de confirmación de eliminación de documento requerido */}
       <AlertDialog
@@ -4211,6 +3588,21 @@ const EmployeeManagement = () => {
             </div>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* NUEVO MODAL: Asignación de Documentos con API Real */}
+      {showNewAssignmentModal && employeeForNewAssignment && (
+        <DocumentAssignmentModal
+          open={showNewAssignmentModal}
+          onOpenChange={setShowNewAssignmentModal}
+          employee={employeeForNewAssignment}
+          onAssigned={() => {
+            // Recargar documentos del empleado si es necesario
+            toast.success('Documentos asignados correctamente');
+            setShowNewAssignmentModal(false);
+            setEmployeeForNewAssignment(null);
+          }}
+        />
       )}
     </div>
   );
