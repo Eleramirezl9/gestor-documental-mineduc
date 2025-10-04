@@ -1,0 +1,23 @@
+// Agregar después de la sección de Notas (línea ~151), antes de {/* Botones */}:
+
+          {/* Información de Renovación */}
+          {assignment?.has_expiration && (
+            <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-200 dark:border-orange-700 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-2 w-2 rounded-full bg-orange-600"></div>
+                <span className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+                  Este documento requiere renovación
+                </span>
+              </div>
+              <p className="text-xs text-orange-700 dark:text-orange-300">
+                Período de renovación: cada {assignment.renewal_period || 12} {
+                  assignment.renewal_unit === 'years' ? 'años' :
+                  assignment.renewal_unit === 'days' ? 'días' :
+                  'meses'
+                }
+              </p>
+              <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                Recuerda actualizar la fecha límite cuando se renueve el documento.
+              </p>
+            </div>
+          )}

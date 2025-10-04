@@ -1,0 +1,115 @@
+## CAMBIOS A REALIZAR EN EditAssignedDocumentModal.jsx
+
+### 1. Actualizar estado inicial (línea ~16-20):
+```javascript
+const [formData, setFormData] = useState({
+  priority: 'normal',
+  dueDate: '',
+  notes: '',
+  hasCustomRenewal: false,
+  customRenewalPeriod: null,
+  customRenewalUnit: 'months'
+});
+```
+
+### 2. Actualizar useEffect (línea ~26-32):
+```javascript
+setFormData({
+  priority: assignment.priority || 'normal',
+  dueDate: assignment.dueDate ? new Date(assignment.dueDate).toISOString().split('T')[0] : '',
+  notes: assignment.notes || '',
+  hasCustomRenewal: assignment.has_custom_renewal || false,
+  customRenewalPeriod: assignment.custom_renewal_period || null,
+  customRenewalUnit: assignment.custom_renewal_unit || 'months'
+});
+```
+
+### 3. Actualizar handleSubmit para incluir datos de renovación (línea ~55-60):
+```javascript
+const updateData = {
+  priority: formData.priority,
+  notes: formData.notes || null,
+  hasCustomRenewal: formData.hasCustomRenewal,
+  customRenewalPeriod: formData.hasCustomRenewal ? formData.customRenewalPeriod : null,
+  customRenewalUnit: formData.hasCustomRenewal ? formData.customRenewalUnit : 'months'
+};
+if (formData.dueDate) {
+  updateData.dueDate = formData.dueDate;
+}
+```
+
+### 4. Agregar sección de Configuración de Renovación Personalizada (después de línea ~151):
+```jsx
+{/* Configuración de Renovación Personalizada */}
+<div className="space-y-4 pt-4 border-t">
+  <h3 className="font-semibold text-gray-900 dark:text-white">
+    Configuración de Renovación Personalizada
+  </h3>
+  
+  {/* Info del documento type */}
+  {(assignment?.has_expiration) && (
+    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+      <p className="text-xs text-blue-700 dark:text-blue-300">
+        <strong>Renovación por defecto:</strong> cada {assignment.renewal_period || 12} {
+          assignment.renewal_unit === 'years' ? 'años' :
+          assignment.renewal_unit === 'days' ? 'días' :
+          'meses'
+        }
+      </p>
+    </div>
+  )}
+
+  {/* Checkbox para habilitar renovación personalizada */}
+  <div className="flex items-center gap-3">
+    <input
+      type="checkbox"
+      id="hasCustomRenewal"
+      checked={formData.hasCustomRenewal}
+      onChange={(e) => handleChange('hasCustomRenewal', e.target.checked)}
+      className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+      disabled={loading}
+    />
+    <Label htmlFor="hasCustomRenewal" className="text-sm font-medium cursor-pointer">
+      Usar período de renovación personalizado
+    </Label>
+  </div>
+
+  {/* Campos de renovación personalizada */}
+  {formData.hasCustomRenewal && (
+    <div className="p-4 bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-200 dark:border-purple-700 rounded-lg space-y-3">
+      <Label className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+        Período de renovación personalizado
+      </Label>
+      <div className="flex gap-3">
+        <Input
+          type="number"
+          value={formData.customRenewalPeriod || ''}
+          onChange={(e) => handleChange('customRenewalPeriod', parseInt(e.target.value) || null)}
+          placeholder="Ej: 6"
+          min="1"
+          className="w-32 border-2"
+          disabled={loading}
+        />
+        <select
+          value={formData.customRenewalUnit}
+          onChange={(e) => handleChange('customRenewalUnit', e.target.value)}
+          className="flex-1 px-3 py-2 border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          disabled={loading}
+        >
+          <option value="days">Días</option>
+          <option value="months">Meses</option>
+          <option value="years">Años</option>
+        </select>
+      </div>
+      <p className="text-xs text-purple-700 dark:text-purple-300">
+        Este documento se renovará cada {formData.customRenewalPeriod || '___'} {
+          formData.customRenewalUnit === 'days' ? 'días' :
+          formData.customRenewalUnit === 'months' ? 'meses' :
+          'años'
+        } (en lugar del período por defecto).
+      </p>
+    </div>
+  )}
+</div>
+```
+

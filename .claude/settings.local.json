@@ -3,7 +3,9 @@
     "allow": [
       "Bash(curl:*)",
       "Bash(node:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(git stash:*)",
+      "Bash(git checkout:*)"
     ],
     "defaultMode": "acceptEdits"
   }

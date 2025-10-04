@@ -88,18 +88,33 @@ export const useEmployeeDocumentAssignment = (employeeId) => {
           dt => dt.name === doc.document_type
         );
 
+        // Mapear prioridad del backend (high/medium/low) al frontend (urgente/alta/normal/baja)
+        const priorityMap = {
+          'high': 'urgente',
+          'medium': 'normal',
+          'low': 'baja'
+        };
+
         return {
           id: doc.id,
           documentId: docType?.id || '', // Usar el ID del documento type encontrado
           documentName: doc.document_type, // Guardar el nombre también
-          priority: doc.priority || 'normal',
+          priority: priorityMap[doc.priority] || 'normal',
           dueDate: doc.required_date, // La tabla usa 'required_date' no 'due_date'
           status: doc.status || 'pending',
           notes: doc.description || '', // La tabla usa 'description' no 'notes'
           assignedAt: doc.created_at,
           uploadDate: doc.upload_date,
           fileName: doc.file_name,
-          fileUrl: doc.file_url
+          fileUrl: doc.file_url,
+          // Campos de renovación personalizada del assignment
+          has_custom_renewal: doc.has_custom_renewal,
+          custom_renewal_period: doc.custom_renewal_period,
+          custom_renewal_unit: doc.custom_renewal_unit,
+          // Campos de renovación del tipo de documento
+          has_expiration: docType?.has_expiration,
+          renewal_period: docType?.renewal_period,
+          renewal_unit: docType?.renewal_unit
         };
       });
 

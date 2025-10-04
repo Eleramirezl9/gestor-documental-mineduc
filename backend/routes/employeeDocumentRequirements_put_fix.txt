@@ -1,0 +1,106 @@
+router.put('/:id',
+  verifyToken,
+  [
+    body('priority').isIn(['baja', 'normal', 'alta', 'urgente']).optional(),
+    body('dueDate').optional(),
+    body('status').isIn(['pendiente', 'subido', 'aprobado', 'rechazado', 'vencido']).optional(),
+    body('notes').optional(),
+    body('hasCustomRenewal').isBoolean().optional(),
+    body('customRenewalPeriod').optional().custom((value) => {
+      if (value === null || value === undefined) return true;
+      if (Number.isInteger(value) && value >= 1) return true;
+      throw new Error('customRenewalPeriod debe ser un entero mayor o igual a 1');
+    }),
+    body('customRenewalUnit').optional().custom((value) => {
+      if (value === null || value === undefined) return true;
+      if (['days', 'months', 'years'].includes(value)) return true;
+      throw new Error('customRenewalUnit debe ser days, months o years');
+    })
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { id } = req.params;
+      const { priority, dueDate, status, notes, hasCustomRenewal, customRenewalPeriod, customRenewalUnit } = req.body;
+
+      // Preparar datos para actualización (mapear a estructura de DB)
+      const updateData = {};
+
+      if (priority !== undefined) {
+        // Mapear prioridad al formato antiguo (high/medium/low)
+        updateData.priority = priority === 'urgente' ? 'high' :
+                               priority === 'alta' ? 'high' :
+                               priority === 'normal' ? 'medium' : 'low';
+      }
+
+      if (dueDate !== undefined) {
+        updateData.required_date = dueDate;
+      }
+
+      if (status !== undefined) {
+        updateData.status = status;
+      }
+
+      if (notes !== undefined) {
+        updateData.description = notes;
+      }
+
+      // Manejar renovación personalizada con validación de constraint
+      if (hasCustomRenewal !== undefined) {
+        updateData.has_custom_renewal = hasCustomRenewal;
+
+        // Si hasCustomRenewal es false, forzar period y unit a NULL
+        if (hasCustomRenewal === false) {
+          updateData.custom_renewal_period = null;
+          updateData.custom_renewal_unit = null;
+        } else {
+          // Si hasCustomRenewal es true, establecer los valores si están presentes
+          if (customRenewalPeriod !== undefined) {
+            updateData.custom_renewal_period = customRenewalPeriod;
+          }
+          if (customRenewalUnit !== undefined) {
+            updateData.custom_renewal_unit = customRenewalUnit;
+          }
+        }
+      } else {
+        // Si hasCustomRenewal no está definido, solo actualizar period y unit si están presentes
+        if (customRenewalPeriod !== undefined) {
+          updateData.custom_renewal_period = customRenewalPeriod;
+        }
+        if (customRenewalUnit !== undefined) {
+          updateData.custom_renewal_unit = customRenewalUnit;
+        }
+      }
+
+      console.log('🔄 Actualizando documento requerido:', id, updateData);
+
+      const { data, error } = await supabaseAdmin
+        .from('employee_document_requirements')
+        .update(updateData)
+        .eq('id', id)
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      console.log('✅ Documento actualizado correctamente');
+
+      res.json({
+        success: true,
+        data,
+        message: 'Documento actualizado correctamente'
+      });
+    } catch (error) {
+      console.error('Error actualizando documento:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error al actualizar documento',
+        message: error.message
+      });
+    }
+  }
+);
