@@ -15,7 +15,8 @@ import {
   Home,
   Bot,
   UserCheck,
-  Activity
+  Activity,
+  RefreshCw
 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -43,6 +44,7 @@ const Layout = () => {
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Usuarios', href: '/users', icon: Users },
     { name: 'Empleados', href: '/employees', icon: UserCheck, adminOnly: true },
+    { name: 'Renovaciones', href: '/renewals', icon: RefreshCw },
     { name: 'Historial de Actividad', href: '/activity-history', icon: Activity },
     { name: 'Notificaciones', href: '/notifications', icon: Bell },
     { name: 'Automatización', href: '/automation', icon: Bot, adminOnly: true },

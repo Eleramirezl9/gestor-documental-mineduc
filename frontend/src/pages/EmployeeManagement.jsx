@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useEmployeeRealtimeUpdates } from '../hooks/useEmployeeRealtimeUpdates';
 import { toast } from 'react-hot-toast';
@@ -64,6 +65,7 @@ import {
 } from 'lucide-react';
 
 const EmployeeManagement = () => {
+  const { employeeId } = useParams();
   const { user } = useAuth();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -96,7 +98,7 @@ const EmployeeManagement = () => {
   const [showDocumentsModal, setShowDocumentsModal] = useState(false);
   const [selectedEmployeeForDocuments, setSelectedEmployeeForDocuments] = useState(null);
 
-  // Hook con API real para gestión de documentos del empleado seleccionado
+  // Hook con API real para gestión de documentos del empleado seleccionado (modal de asignación)
   const {
     allAvailableDocuments: allAvailableDocumentsFromAPI,
     documentTemplates: documentTemplatesFromAPI,
@@ -113,6 +115,22 @@ const EmployeeManagement = () => {
     handleDeleteAssignedDocument,
     setDocumentItems: setDocumentItemsFromHook
   } = useEmployeeDocumentAssignment(selectedEmployeeForDocuments?.employee_id);
+
+  // Hook para ver documentos asignados del empleado en el perfil
+  const {
+    assignedDocuments: profileAssignedDocuments,
+    loading: loadingProfileDocuments,
+    handleUpdateAssignedDocument: updateProfileDocument,
+    handleDeleteAssignedDocument: deleteProfileDocument,
+    loadAssignedDocuments: reloadProfileDocuments
+  } = useEmployeeDocumentAssignment(selectedEmployee?.employee_id);
+
+  // Recargar documentos del perfil cuando cambia el empleado seleccionado
+  useEffect(() => {
+    if (selectedEmployee?.employee_id) {
+      reloadProfileDocuments();
+    }
+  }, [selectedEmployee?.employee_id, reloadProfileDocuments]);
 
   // Compatibilidad con código existente: usar datos de API si están disponibles, sino usar mock
   const documentItems = documentItemsFromHook;
@@ -569,6 +587,18 @@ const EmployeeManagement = () => {
   useEffect(() => {
     loadEmployees();
   }, [filters]);
+
+  // Auto-seleccionar empleado si viene employeeId en la URL
+  useEffect(() => {
+    if (employeeId && employees.length > 0) {
+      const employee = employees.find(emp => emp.employee_id === employeeId);
+      if (employee) {
+        handleViewEmployeeProfile(employee);
+      } else {
+        toast.error(`No se encontró el empleado con ID: ${employeeId}`);
+      }
+    }
+  }, [employeeId, employees]);
 
   // Inicializar ID automáticamente al cargar
   useEffect(() => {
@@ -1041,8 +1071,11 @@ const EmployeeManagement = () => {
       return new Date(dateString).toLocaleDateString('es-GT');
     };
 
-    // Función para generar documentos específicos del empleado seleccionado
-    const getEmployeeDocuments = () => {
+    // Usar documentos asignados reales del hook
+    const documents = profileAssignedDocuments || [];
+
+    // Función para generar documentos mock (DEPRECATED - mantener para referencia)
+    const getEmployeeDocumentsMock = () => {
       const employeeName = `${selectedEmployee.first_name} ${selectedEmployee.last_name}`;
       const employeeId = selectedEmployee.employee_id;
 
@@ -1234,25 +1267,30 @@ const EmployeeManagement = () => {
       return activityConfigs[employeeId] || activityConfigs['default'];
     };
 
-    // Obtener documentos y actividades específicos del empleado
-    const documents = getEmployeeDocuments();
+    // Obtener actividades específicas del empleado
     const activities = getEmployeeActivities();
 
-    // Calcular estadísticas reales basadas en los documentos del empleado
+    // Calcular estadísticas reales basadas en los documentos asignados
     const documentStats = {
-      completos: documents.filter(d => d.status === 'Completo').length,
-      pendientes: documents.filter(d => d.status === 'Pendiente').length,
-      vencidos: documents.filter(d => d.status === 'Vencido').length
+      total: documents.length,
+      aprobado: documents.filter(d => d.status === 'aprobado').length,
+      pendiente: documents.filter(d => d.status === 'pendiente').length,
+      rechazado: documents.filter(d => d.status === 'rechazado').length,
+      subido: documents.filter(d => d.status === 'subido').length,
+      vencido: 0,
+      completionRate: documents.length > 0 ? Math.round((documents.filter(d => d.status === 'aprobado').length / documents.length) * 100) : 0
     };
 
     const getStatusIcon = (status) => {
       switch (status) {
-        case 'Completo':
+        case 'aprobado':
           return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-        case 'Pendiente':
+        case 'pendiente':
           return <ClockIcon className="h-4 w-4 text-yellow-500" />;
-        case 'Vencido':
+        case 'rechazado':
           return <XCircle className="h-4 w-4 text-red-500" />;
+        case 'subido':
+          return <CheckCircle className="h-4 w-4 text-blue-500" />;
         default:
           return <ClockIcon className="h-4 w-4 text-gray-500" />;
       }
@@ -1359,18 +1397,22 @@ const EmployeeManagement = () => {
             <h3 className="text-lg font-semibold mb-6 text-gray-900 dark:text-white">
               Resumen de Documentos
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                <div className="text-3xl font-bold text-green-600 dark:text-green-400">{documentStats.completos}</div>
-                <div className="text-sm text-green-700 dark:text-green-300 mt-1">Completos</div>
+                <div className="text-3xl font-bold text-green-600 dark:text-green-400">{documentStats.aprobado || 0}</div>
+                <div className="text-sm text-green-700 dark:text-green-300 mt-1">Aprobados</div>
+              </div>
+              <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">{documentStats.subido || 0}</div>
+                <div className="text-sm text-blue-700 dark:text-blue-300 mt-1">Subidos</div>
               </div>
               <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-                <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">{documentStats.pendientes}</div>
+                <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">{documentStats.pendiente || 0}</div>
                 <div className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">Pendientes</div>
               </div>
               <div className="text-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                <div className="text-3xl font-bold text-red-600 dark:text-red-400">{documentStats.vencidos}</div>
-                <div className="text-sm text-red-700 dark:text-red-300 mt-1">Vencidos</div>
+                <div className="text-3xl font-bold text-red-600 dark:text-red-400">{documentStats.rechazado || 0}</div>
+                <div className="text-sm text-red-700 dark:text-red-300 mt-1">Rechazados</div>
               </div>
             </div>
           </div>
@@ -1378,200 +1420,291 @@ const EmployeeManagement = () => {
       );
 
       const documentosContent = (
-        <div className="space-y-5">
-          {/* Header con filtros sticky */}
-          <div className="sticky top-0 z-10 bg-[#F2F4F6] dark:bg-gray-900 pb-4 border-b border-[#E1E4E8] dark:border-gray-700">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-              <div>
-                <h3 className="text-xl font-bold text-[#2C3E50] dark:text-white">Documentos del Empleado</h3>
-                <p className="text-sm text-[#636E7B] dark:text-gray-400 mt-1">Gestión y revisión de documentación oficial</p>
+        <div className="space-y-4">
+          {/* Estadísticas de documentos - Estilo compacto */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Total</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{documents.length}</p>
+                </div>
+                <FileText className="h-8 w-8 text-gray-400" />
               </div>
-              <button
-                onClick={() => setShowUploadDocumentModal(true)}
-                className="px-5 py-2 rounded-lg shadow-md bg-[#2C3E50] text-white hover:bg-[#1F2A38] focus:ring-2 focus:ring-offset-2 focus:ring-[#2C3E50] transition-all flex items-center gap-2 w-full sm:w-auto"
-                aria-label="Subir nuevo documento al empleado"
-                title="Agregar un documento para revisión"
-              >
-                <Upload className="h-4 w-4" />
-                Subir Documento
-              </button>
             </div>
 
-            {/* Filtros rápidos tipo chip */}
-            <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
-              <button
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-[#27272A] text-[#2C3E50] dark:text-gray-300 border border-[#E1E4E8] dark:border-[#3F3F46] hover:bg-[#F2F4F6] dark:hover:bg-gray-700 transition-colors whitespace-nowrap"
-                aria-label="Filtrar todos los documentos"
-                title="Mostrar todos los documentos"
-              >
-                Todos ({documents.length})
-              </button>
-              <button
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#F39C12]/20 text-[#F39C12] hover:bg-[#F39C12]/30 transition-colors whitespace-nowrap"
-                aria-label="Filtrar documentos pendientes de revisión"
-                title="Filtrar por documentos pendientes"
-              >
-                ! Pendiente ({documents.filter(d => d.approvalStatus === 'pendiente').length})
-              </button>
-              <button
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#27AE60]/20 text-[#27AE60] hover:bg-[#27AE60]/30 transition-colors whitespace-nowrap"
-                aria-label="Filtrar documentos aprobados"
-                title="Filtrar por documentos aprobados"
-              >
-                ✓ Aprobado ({documents.filter(d => d.approvalStatus === 'aprobado').length})
-              </button>
-              <button
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#C0392B]/20 text-[#C0392B] hover:bg-[#C0392B]/30 transition-colors whitespace-nowrap"
-                aria-label="Filtrar documentos rechazados"
-                title="Filtrar por documentos rechazados"
-              >
-                ✗ Rechazado ({documents.filter(d => d.approvalStatus === 'rechazado').length})
-              </button>
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-green-200 dark:border-green-900">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-green-700 dark:text-green-400 font-medium">Aprobados</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{documents.filter(d => d.status === 'approved' || d.status === 'aprobado').length}</p>
+                </div>
+                <CheckCircle className="h-8 w-8 text-green-500" />
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-blue-200 dark:border-blue-900">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-blue-700 dark:text-blue-400 font-medium">Subidos</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{documents.filter(d => d.status === 'uploaded' || d.status === 'subido').length}</p>
+                </div>
+                <Upload className="h-8 w-8 text-blue-500" />
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-yellow-200 dark:border-yellow-900">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-yellow-700 dark:text-yellow-400 font-medium">Pendientes</p>
+                  <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400 mt-1">{documents.filter(d => d.status === 'pending' || d.status === 'pendiente').length}</p>
+                </div>
+                <Clock className="h-8 w-8 text-yellow-500" />
+              </div>
             </div>
           </div>
 
           {/* Lista de documentos */}
           <div className="space-y-3">
-            {documents.map((doc) => (
-              <div
-                key={doc.id}
-                className="group relative border-l-4 rounded-2xl bg-white dark:bg-[#27272A] shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden border border-[#E1E4E8] dark:border-[#3F3F46]"
-                style={{
-                  borderLeftColor: doc.approvalStatus === 'aprobado' ? '#27AE60' :
-                                  doc.approvalStatus === 'rechazado' ? '#C0392B' : '#F39C12'
-                }}
-              >
-                <div className="p-5">
-                  {/* Header del documento */}
-                  <div className="flex items-start justify-between gap-4 mb-3">
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      {/* Icono del tipo de documento */}
-                      <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#2C3E50] to-[#34495E] flex items-center justify-center shadow-md">
-                        <FileText className="h-6 w-6 text-white" />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-base font-bold text-gray-900 dark:text-white mb-1 truncate group-hover:text-[#2C3E50] transition-colors">
-                          {doc.name}
-                        </h4>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {doc.uploadDate ? formatDate(doc.uploadDate) : 'No subido'}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <User className="h-3 w-3" />
-                            {doc.uploadedBy || 'Sistema'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Badge de estado con mejor diseño */}
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg shadow-sm ${
-                          doc.approvalStatus === 'aprobado'
-                            ? 'bg-[#27AE60]/20 text-[#27AE60] dark:bg-[#27AE60]/20 dark:text-[#27AE60] border-2 border-[#27AE60]/30' :
-                          doc.approvalStatus === 'rechazado'
-                            ? 'bg-[#C0392B]/20 text-[#C0392B] dark:bg-[#C0392B]/20 dark:text-[#C0392B] border-2 border-[#C0392B]/30' :
-                          'bg-[#F39C12]/20 text-[#F39C12] dark:bg-[#F39C12]/20 dark:text-[#F39C12] border-2 border-[#F39C12]/30'
-                        }`}
-                        aria-label={`Estado: ${doc.approvalStatus}`}
-                        title={`Estado del documento: ${doc.approvalStatus}`}
-                      >
-                        {doc.approvalStatus === 'aprobado' && <CheckCircle className="h-3.5 w-3.5" />}
-                        {doc.approvalStatus === 'rechazado' && <XCircle className="h-3.5 w-3.5" />}
-                        {doc.approvalStatus === 'pendiente' && <Clock className="h-3.5 w-3.5" />}
-                        <span className="capitalize">{doc.approvalStatus}</span>
-                      </Badge>
-                    </div>
-                  </div>
-
-                  {/* Acciones principales - Diseño mejorado */}
-                  {doc.uploadDate && (
-                    <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[#E1E4E8] dark:border-[#3F3F46]">
-                      {/* Ver documento */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 px-4 text-xs font-medium border-[#E1E4E8] dark:border-[#3F3F46] hover:bg-[#2C3E50] hover:text-white hover:border-[#2C3E50] transition-all"
-                        aria-label={`Ver documento ${doc.name}`}
-                        title="Ver contenido del documento"
-                      >
-                        <Eye className="h-3.5 w-3.5 mr-1.5" />
-                        Ver documento
-                      </Button>
-
-                      {/* Aprobar/Rechazar solo si está pendiente */}
-                      {doc.approvalStatus === 'pendiente' && (
-                        <div className="flex gap-2 ml-auto">
-                          <Button
-                            size="sm"
-                            className="h-9 px-4 text-xs font-medium bg-[#27AE60] hover:bg-[#229954] text-white shadow-sm hover:shadow-md transition-all focus:ring-2 focus:ring-offset-2 focus:ring-[#27AE60]"
-                            onClick={() => {/* Aprobar */}}
-                            aria-label={`Aprobar documento ${doc.name}`}
-                            title="Aprobar este documento"
-                          >
-                            <Check className="h-3.5 w-3.5 mr-1.5" />
-                            Aprobar
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="h-9 px-4 text-xs font-medium bg-[#C0392B] hover:bg-[#A93226] text-white shadow-sm hover:shadow-md transition-all focus:ring-2 focus:ring-offset-2 focus:ring-[#C0392B]"
-                            onClick={() => {/* Rechazar */}}
-                            aria-label={`Rechazar documento ${doc.name}`}
-                            title="Rechazar este documento"
-                          >
-                            <X className="h-3.5 w-3.5 mr-1.5" />
-                            Rechazar
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* Botón comentar */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={`h-9 px-4 text-xs font-medium border-[#E1E4E8] dark:border-[#3F3F46] hover:bg-[#2C3E50] hover:text-white hover:border-[#2C3E50] transition-all ${
-                          doc.approvalStatus !== 'pendiente' ? 'ml-auto' : ''
-                        }`}
-                        onClick={() => {/* Agregar comentario */}}
-                        aria-label={`Agregar comentario a ${doc.name}`}
-                        title="Agregar un comentario"
-                      >
-                        <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
-                        Comentar
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Sección de comentarios mejorada */}
-                  {doc.comments && doc.comments.length > 0 && (
-                    <div className="mt-4 p-3 bg-gradient-to-br from-[#2C3E50]/5 to-[#2C3E50]/10 dark:from-[#2C3E50]/20 dark:to-[#2C3E50]/10 rounded-lg border border-[#E1E4E8] dark:border-[#3F3F46]">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-[#2C3E50] dark:text-gray-200 mb-2">
-                        <MessageSquare className="h-3.5 w-3.5" />
-                        Comentarios ({doc.comments.length})
-                      </div>
-                      <div className="space-y-2">
-                        {doc.comments.slice(-2).map((comment, idx) => (
-                          <div
-                            key={idx}
-                            className="text-xs bg-white/60 dark:bg-gray-800/40 p-2 rounded border border-[#E1E4E8] dark:border-[#3F3F46]"
-                          >
-                            <span className="font-semibold text-[#2C3E50] dark:text-gray-300">{comment.user}:</span>{' '}
-                            <span className="text-gray-700 dark:text-gray-300">{comment.text}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Indicador visual de hover */}
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-[#2C3E50] to-[#34495E] transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+            {documents.length === 0 ? (
+              <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
+                <FileText className="h-12 w-12 mx-auto text-gray-400 mb-3" />
+                <p className="text-gray-600 dark:text-gray-400 font-medium">No hay documentos asignados a este empleado</p>
+                <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">Usa el botón "Asignar Documentos" para agregar requisitos</p>
               </div>
-            ))}
+            ) : (
+              documents.map((doc) => {
+                // Mapeo de campos de assignedDocuments
+                const docName = doc.documentName || 'Documento sin nombre';
+                const docCategory = 'General'; // Por ahora no viene en assignedDocuments
+                const docStatus = doc.status || 'pending';
+                const assignedDate = doc.assignedAt || doc.created_at;
+                const dueDate = doc.dueDate;
+                const priority = doc.priority || 'normal';
+                const notes = doc.notes;
+
+                return (
+                  <div
+                    key={doc.id}
+                    className="group relative border-l-4 rounded-2xl bg-white dark:bg-[#27272A] shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden border border-[#E1E4E8] dark:border-[#3F3F46]"
+                    style={{
+                      borderLeftColor:
+                        (docStatus === 'approved' || docStatus === 'aprobado') ? '#27AE60' :
+                        (docStatus === 'rejected' || docStatus === 'rechazado') ? '#C0392B' :
+                        (docStatus === 'uploaded' || docStatus === 'subido') ? '#3B82F6' : '#F39C12'
+                    }}
+                  >
+                    <div className="p-5">
+                      {/* Header del documento */}
+                      <div className="flex items-start justify-between gap-4 mb-3">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          {/* Icono del tipo de documento */}
+                          <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#2C3E50] to-[#34495E] flex items-center justify-center shadow-md">
+                            <FileText className="h-6 w-6 text-white" />
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-base font-bold text-gray-900 dark:text-white mb-1 truncate group-hover:text-[#2C3E50] transition-colors">
+                              {docName}
+                            </h4>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700">
+                                {docCategory}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                Asignado: {assignedDate ? formatDate(assignedDate) : 'N/A'}
+                              </span>
+                              {dueDate && (
+                                <span className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
+                                  <Clock className="h-3 w-3" />
+                                  Vence: {formatDate(dueDate)}
+                                </span>
+                              )}
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                                priority === 'urgente' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
+                                priority === 'alta' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300' :
+                                'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                              }`}>
+                                {priority === 'urgente' ? '🔴 Urgente' :
+                                 priority === 'alta' ? '🟠 Alta' :
+                                 priority === 'baja' ? '🟢 Baja' : '⚪ Normal'}
+                              </span>
+                            </div>
+                            {notes && (
+                              <p className="mt-1 text-xs text-gray-600 dark:text-gray-400 italic">
+                                Nota: {notes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Badge de estado con mejor diseño */}
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg shadow-sm ${
+                              docStatus === 'approved' || docStatus === 'aprobado'
+                                ? 'bg-[#27AE60]/20 text-[#27AE60] dark:bg-[#27AE60]/20 dark:text-[#27AE60] border-2 border-[#27AE60]/30' :
+                              docStatus === 'rejected' || docStatus === 'rechazado'
+                                ? 'bg-[#C0392B]/20 text-[#C0392B] dark:bg-[#C0392B]/20 dark:text-[#C0392B] border-2 border-[#C0392B]/30' :
+                              docStatus === 'uploaded' || docStatus === 'subido'
+                                ? 'bg-[#3B82F6]/20 text-[#3B82F6] dark:bg-[#3B82F6]/20 dark:text-[#3B82F6] border-2 border-[#3B82F6]/30' :
+                              'bg-[#F39C12]/20 text-[#F39C12] dark:bg-[#F39C12]/20 dark:text-[#F39C12] border-2 border-[#F39C12]/30'
+                            }`}
+                            aria-label={`Estado: ${docStatus}`}
+                            title={`Estado del documento: ${docStatus}`}
+                          >
+                            {(docStatus === 'approved' || docStatus === 'aprobado') && <CheckCircle className="h-3.5 w-3.5" />}
+                            {(docStatus === 'rejected' || docStatus === 'rechazado') && <XCircle className="h-3.5 w-3.5" />}
+                            {(docStatus === 'uploaded' || docStatus === 'subido') && <Upload className="h-3.5 w-3.5" />}
+                            {docStatus === 'pending' && <Clock className="h-3.5 w-3.5" />}
+                            <span className="capitalize">{docStatus === 'pending' ? 'Pendiente' : docStatus === 'approved' ? 'Aprobado' : docStatus === 'rejected' ? 'Rechazado' : docStatus === 'uploaded' ? 'Subido' : docStatus}</span>
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* Acciones principales - Diseño mejorado */}
+                      <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[#E1E4E8] dark:border-[#3F3F46]">
+                        {/* Botón Ver documento - siempre visible con lógica informativa */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 px-4 text-xs font-medium border-[#E1E4E8] dark:border-[#3F3F46] hover:bg-[#2C3E50] hover:text-white hover:border-[#2C3E50] transition-all"
+                          onClick={() => {
+                            if (doc.fileUrl) {
+                              // Si hay archivo, abrir en nueva pestaña
+                              window.open(doc.fileUrl, '_blank');
+                            } else if (docStatus === 'pending') {
+                              // Si está pendiente y no hay archivo
+                              toast.info('Este documento aún no ha sido subido por el empleado', {
+                                duration: 4000,
+                                icon: '📄'
+                              });
+                            } else if (docStatus === 'approved' || docStatus === 'aprobado') {
+                              // Si está aprobado pero no hay URL (error de datos)
+                              toast.error('No se encontró el archivo del documento', {
+                                duration: 4000,
+                                icon: '⚠️'
+                              });
+                            } else {
+                              // Otro estado sin archivo
+                              toast.info('El archivo del documento no está disponible', {
+                                duration: 4000,
+                                icon: 'ℹ️'
+                              });
+                            }
+                          }}
+                          aria-label={`Ver documento ${docName}`}
+                          title={doc.fileUrl ? "Ver contenido del documento" : "Ver estado del documento"}
+                        >
+                          <Eye className="h-3.5 w-3.5 mr-1.5" />
+                          Ver documento
+                        </Button>
+
+                        {/* Subir documento - si está pendiente y no tiene archivo */}
+                        {docStatus === 'pending' && !doc.fileUrl && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 px-4 text-xs font-medium border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/20 transition-all"
+                            onClick={() => {
+                              // TODO: Abrir modal para subir documento
+                              toast.info('Función de subida en desarrollo');
+                            }}
+                            aria-label={`Subir documento ${docName}`}
+                            title="Subir archivo del documento"
+                          >
+                            <Upload className="h-3.5 w-3.5 mr-1.5" />
+                            Subir documento
+                          </Button>
+                        )}
+
+                        {/* Aprobar/Rechazar solo si está subido o pendiente de aprobación */}
+                        {(docStatus === 'subido' || docStatus === 'pending') && (
+                          <div className="flex gap-2 ml-auto">
+                            <Button
+                              size="sm"
+                              className="h-9 px-4 text-xs font-medium bg-[#27AE60] hover:bg-[#229954] text-white shadow-sm hover:shadow-md transition-all focus:ring-2 focus:ring-offset-2 focus:ring-[#27AE60]"
+                              onClick={async () => {
+                                try {
+                                  await updateProfileDocument(doc.id, { status: 'approved' });
+                                  toast.success(`Documento "${docName}" aprobado`);
+                                  reloadProfileDocuments();
+                                } catch (error) {
+                                  console.error('Error aprobando:', error);
+                                  toast.error('Error al aprobar documento');
+                                }
+                              }}
+                              aria-label={`Aprobar documento ${docName}`}
+                              title="Aprobar este documento"
+                            >
+                              <Check className="h-3.5 w-3.5 mr-1.5" />
+                              Aprobar
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-9 px-4 text-xs font-medium bg-[#C0392B] hover:bg-[#A93226] text-white shadow-sm hover:shadow-md transition-all focus:ring-2 focus:ring-offset-2 focus:ring-[#C0392B]"
+                              onClick={async () => {
+                                const motivo = prompt('Motivo del rechazo (opcional):');
+                                try {
+                                  await updateProfileDocument(doc.id, {
+                                    status: 'rejected',
+                                    notes: motivo ? `${notes || ''}\n\nRechazado: ${motivo}` : notes
+                                  });
+                                  toast.success(`Documento "${docName}" rechazado`);
+                                  reloadProfileDocuments();
+                                } catch (error) {
+                                  console.error('Error rechazando:', error);
+                                  toast.error('Error al rechazar documento');
+                                }
+                              }}
+                              aria-label={`Rechazar documento ${docName}`}
+                              title="Rechazar este documento"
+                            >
+                              <X className="h-3.5 w-3.5 mr-1.5" />
+                              Rechazar
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Botón comentar */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={`h-9 px-4 text-xs font-medium border-[#E1E4E8] dark:border-[#3F3F46] hover:bg-[#2C3E50] hover:text-white hover:border-[#2C3E50] transition-all ${
+                            docStatus !== 'subido' && docStatus !== 'pending' ? 'ml-auto' : ''
+                          }`}
+                          onClick={async () => {
+                            const comentario = prompt('Agregar comentario:');
+                            if (comentario) {
+                              try {
+                                await updateProfileDocument(doc.id, {
+                                  notes: notes ? `${notes}\n\n${comentario}` : comentario
+                                });
+                                toast.success('Comentario agregado');
+                                reloadProfileDocuments();
+                              } catch (error) {
+                                console.error('Error agregando comentario:', error);
+                                toast.error('Error al agregar comentario');
+                              }
+                            }
+                          }}
+                          aria-label={`Agregar comentario a ${docName}`}
+                          title="Agregar un comentario"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+                          Comentar
+                        </Button>
+                      </div>
+
+                    </div>
+
+                    {/* Indicador visual de hover */}
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-[#2C3E50] to-[#34495E] transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+                  </div>
+                );
+              })
+            )}
           </div>
 
           {/* Footer con información adicional */}
@@ -2558,7 +2691,12 @@ const EmployeeManagement = () => {
         employee={selectedEmployeeForDocuments}
         onSuccess={() => {
           console.log("Documentos asignados exitosamente");
-          // Opcional: Recargar datos del empleado si es necesario
+          // Recargar documentos en el perfil si el empleado seleccionado es el mismo
+          if (selectedEmployee?.employee_id === selectedEmployeeForDocuments?.employee_id) {
+            reloadProfileDocuments();
+          }
+          // Recargar lista de empleados para actualizar estadísticas
+          loadEmployees();
         }}
       />
 

@@ -1184,4 +1184,141 @@ router.get('/statistics', verifyToken, async (req, res) => {
   }
 });
 
+
+// ==================== ENDPOINTS DE NOTIFICACIONES DE RENOVACIÓN ====================
+
+const renewalService = require('../services/renewalNotificationService');
+
+/**
+ * @swagger
+ * /api/employee-document-requirements/renewals/expiring:
+ *   get:
+ *     summary: Obtener documentos próximos a vencer
+ *     tags: [Renewal Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: days
+ *         schema:
+ *           type: integer
+ *           default: 30
+ *         description: Días de anticipación
+ */
+router.get('/renewals/expiring', verifyToken, async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 30;
+
+    const documents = await renewalService.getDocumentsExpiringIn(days);
+
+    res.json({
+      success: true,
+      data: documents,
+      count: documents.length,
+      days_ahead: days
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo documentos próximos a vencer:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener documentos próximos a vencer',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/employee-document-requirements/renewals/expired:
+ *   get:
+ *     summary: Obtener documentos vencidos
+ *     tags: [Renewal Notifications]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/renewals/expired', verifyToken, async (req, res) => {
+  try {
+    const documents = await renewalService.getExpiredDocuments();
+
+    res.json({
+      success: true,
+      data: documents,
+      count: documents.length
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo documentos vencidos:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener documentos vencidos',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/employee-document-requirements/renewals/summary/{employeeId}:
+ *   get:
+ *     summary: Obtener resumen de renovaciones de un empleado
+ *     tags: [Renewal Notifications]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/renewals/summary/:employeeId', verifyToken, async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    const summary = await renewalService.getEmployeeRenewalSummary(employeeId);
+
+    res.json({
+      success: true,
+      data: summary
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo resumen de empleado:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener resumen de empleado',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/employee-document-requirements/renewals/notify:
+ *   post:
+ *     summary: Crear notificación de renovación
+ *     tags: [Renewal Notifications]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post('/renewals/notify', verifyToken, async (req, res) => {
+  try {
+    const { employeeId, documentInfo, type } = req.body;
+
+    const notification = await renewalService.createRenewalNotification(
+      employeeId,
+      documentInfo,
+      type
+    );
+
+    res.json({
+      success: true,
+      data: notification
+    });
+
+  } catch (error) {
+    console.error('Error creando notificación:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al crear notificación',
+      message: error.message
+    });
+  }
+});
+
 module.exports = router;

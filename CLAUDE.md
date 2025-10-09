@@ -147,3 +147,8 @@ Test users: admin@mineduc.gob.gt, editor@mineduc.gob.gt, viewer@mineduc.gob.gt
 - Complete authentication guide in `backend/docs/JWT_AUTHENTICATION_GUIDE.md`
 
 **Rate Limiting**: Different limits for auth routes (5 req/15min) vs general routes (100 req/15min).
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.

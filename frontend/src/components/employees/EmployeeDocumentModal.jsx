@@ -19,7 +19,8 @@ import {
   AlertTriangle,
   Calendar,
   Edit,
-  Trash2
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 import { useEmployeeDocumentAssignment } from '../../hooks/useEmployeeDocumentAssignment';
 import { toast } from 'react-hot-toast';
@@ -213,11 +214,6 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
                             {document?.required && (
                               <Badge variant="destructive" className="text-xs">Obligatorio</Badge>
                             )}
-                            {document?.has_expiration && (
-                              <Badge variant="outline" className="text-xs bg-orange-100 text-orange-800 border-orange-300">
-                                Renovación: {formatRenewalPeriod(document)}
-                              </Badge>
-                            )}
                           </div>
                           <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                             {document?.description || 'Sin descripción'}
@@ -261,7 +257,8 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
                             {assignment.has_custom_renewal && assignment.custom_renewal_period ? (
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 font-medium">
-                                  🔄 Renovación personalizada: cada {assignment.custom_renewal_period} {
+                                  <RefreshCw className="h-3 w-3" />
+                                  Renovación personalizada: cada {assignment.custom_renewal_period} {
                                     assignment.custom_renewal_unit === 'years' ? 'años' :
                                     assignment.custom_renewal_unit === 'days' ? 'días' :
                                     'meses'
@@ -271,7 +268,8 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
                             ) : assignment.has_expiration && assignment.renewal_period ? (
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 font-medium">
-                                  🔄 Renovación: cada {assignment.renewal_period} {
+                                  <RefreshCw className="h-3 w-3" />
+                                  Renovación: cada {assignment.renewal_period} {
                                     assignment.renewal_unit === 'years' ? 'años' :
                                     assignment.renewal_unit === 'days' ? 'días' :
                                     'meses'

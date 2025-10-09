@@ -5,7 +5,12 @@
       "Bash(node:*)",
       "Bash(npm run build:*)",
       "Bash(git stash:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npm test)",
+      "Bash(if [ -f .env ])",
+      "Bash(then echo \"✓ .env exists\")",
+      "Bash(else echo \"✗ .env file not found\")",
+      "Bash(fi)"
     ],
     "defaultMode": "acceptEdits"
   }
