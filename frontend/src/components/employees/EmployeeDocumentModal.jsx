@@ -146,7 +146,7 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
   if (!employee) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
+    <Dialog open={open} onOpenChange={onOpenChange} modal={true}>
       <DialogContent
         className="max-w-5xl max-h-[90vh] flex flex-col"
         onPointerDownOutside={(e) => e.preventDefault()}

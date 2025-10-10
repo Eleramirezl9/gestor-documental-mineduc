@@ -863,27 +863,33 @@ router.put('/requirement/:id/approve', verifyToken, async (req, res) => {
         notes: notes || currentDoc.notes
       })
       .eq('id', id)
-      .select(`
-        *,
-        employee:employees(id, first_name, last_name, email)
-      `)
+      .select()
       .single();
 
     if (updateError) throw updateError;
 
-    // Registrar en auditoría
-    await auditService.log({
-      user_id: req.user.id,
-      action: 'approve_employee_document',
-      resource_type: 'employee_document_requirement',
-      resource_id: id,
-      details: {
-        employee_id: currentDoc.employee_id,
-        employee_name: currentDoc.employee ? `${currentDoc.employee.first_name} ${currentDoc.employee.last_name}` : 'Desconocido',
-        document_type: currentDoc.document_type,
-        previous_status: currentDoc.status
-      }
-    });
+    // Agregar información del empleado manualmente desde currentDoc
+    if (updatedDoc && currentDoc.employee) {
+      updatedDoc.employee = currentDoc.employee;
+    }
+
+    // Registrar en auditoría (no crítico, continuar si falla)
+    try {
+      await auditService.log({
+        user_id: req.user.id,
+        action: 'approve_employee_document',
+        resource_type: 'employee_document_requirement',
+        resource_id: id,
+        details: {
+          employee_id: currentDoc.employee_id,
+          employee_name: currentDoc.employee ? `${currentDoc.employee.first_name} ${currentDoc.employee.last_name}` : 'Desconocido',
+          document_type: currentDoc.document_type,
+          previous_status: currentDoc.status
+        }
+      });
+    } catch (auditError) {
+      console.warn('⚠️  Error registrando auditoría (no crítico):', auditError.message);
+    }
 
     res.json({
       success: true,
@@ -893,7 +899,12 @@ router.put('/requirement/:id/approve', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('Error en PUT /employee-documents/requirement/:id/approve:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    console.error('Stack trace:', error.stack);
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
@@ -974,28 +985,34 @@ router.put('/requirement/:id/reject', verifyToken, async (req, res) => {
         notes: notes || currentDoc.notes
       })
       .eq('id', id)
-      .select(`
-        *,
-        employee:employees(id, first_name, last_name, email)
-      `)
+      .select()
       .single();
 
     if (updateError) throw updateError;
 
-    // Registrar en auditoría
-    await auditService.log({
-      user_id: req.user.id,
-      action: 'reject_employee_document',
-      resource_type: 'employee_document_requirement',
-      resource_id: id,
-      details: {
-        employee_id: currentDoc.employee_id,
-        employee_name: currentDoc.employee ? `${currentDoc.employee.first_name} ${currentDoc.employee.last_name}` : 'Desconocido',
-        document_type: currentDoc.document_type,
-        previous_status: currentDoc.status,
-        rejection_reason: rejection_reason || 'No especificado'
-      }
-    });
+    // Agregar información del empleado manualmente desde currentDoc
+    if (updatedDoc && currentDoc.employee) {
+      updatedDoc.employee = currentDoc.employee;
+    }
+
+    // Registrar en auditoría (no crítico, continuar si falla)
+    try {
+      await auditService.log({
+        user_id: req.user.id,
+        action: 'reject_employee_document',
+        resource_type: 'employee_document_requirement',
+        resource_id: id,
+        details: {
+          employee_id: currentDoc.employee_id,
+          employee_name: currentDoc.employee ? `${currentDoc.employee.first_name} ${currentDoc.employee.last_name}` : 'Desconocido',
+          document_type: currentDoc.document_type,
+          previous_status: currentDoc.status,
+          rejection_reason: rejection_reason || 'No especificado'
+        }
+      });
+    } catch (auditError) {
+      console.warn('⚠️  Error registrando auditoría (no crítico):', auditError.message);
+    }
 
     res.json({
       success: true,
@@ -1005,7 +1022,12 @@ router.put('/requirement/:id/reject', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('Error en PUT /employee-documents/requirement/:id/reject:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    console.error('Stack trace:', error.stack);
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

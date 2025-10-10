@@ -1874,9 +1874,9 @@ const EmployeeManagement = () => {
     }, [selectedEmployee, documentStats, documents, activities, formatDate, getStatusIcon, getActivityIcon]);
 
     return (
-      <Dialog open={showEmployeeProfile} onOpenChange={setShowEmployeeProfile} modal={false}>
+      <Dialog open={showEmployeeProfile} onOpenChange={setShowEmployeeProfile} modal={true}>
         <DialogContent
-          className="max-w-[98vw] w-[95vw] sm:w-[85vw] h-[85vh] sm:h-[80vh] p-0 overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl"
+          className="max-w-[98vw] w-[95vw] sm:w-[85vw] h-[85vh] sm:h-[80vh] p-0 flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl"
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
         >
@@ -1890,7 +1890,7 @@ const EmployeeManagement = () => {
           </DialogHeader>
 
           {/* Header fijo */}
-          <div className="flex items-center gap-4 p-4 border-b bg-white dark:bg-gray-900">
+          <div className="flex items-center gap-4 p-4 border-b bg-white dark:bg-gray-900 shrink-0">
             <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
               {selectedEmployee.first_name?.charAt(0)}{selectedEmployee.last_name?.charAt(0)}
             </div>
@@ -1936,7 +1936,7 @@ const EmployeeManagement = () => {
           </div>
 
           {/* Pestañas - Diseño mejorado */}
-          <div className="flex border-b">
+          <div className="flex border-b shrink-0">
             {[
               { id: 'resumen', label: 'Resumen', icon: <User className="h-4 w-4" /> },
               { id: 'documentos', label: 'Documentos', icon: <FileText className="h-4 w-4" />, badge: 2 },
@@ -1963,8 +1963,8 @@ const EmployeeManagement = () => {
           </div>
 
           {/* Contenido optimizado - sin re-renderizado */}
-          <div className="flex-1 overflow-hidden bg-gray-50 dark:bg-gray-900">
-            <div className="h-full overflow-y-auto p-4 sm:p-6">
+          <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
+            <div className="p-4 sm:p-6">
               {/* Tab: Resumen */}
               <div className={activeProfileTab === 'resumen' ? 'block' : 'hidden'}>
                 {tabContent.resumenContent}
