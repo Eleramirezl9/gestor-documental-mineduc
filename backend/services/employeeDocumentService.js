@@ -334,8 +334,25 @@ class EmployeeDocumentService {
           .filter(req => req.document_id && documentsMap.has(req.document_id))
           .map(req => documentsMap.get(req.document_id));
 
-        // Calcular estados
-        const documentStatus = this.calculateDocumentStatus(employeeDocuments);
+        // Calcular estados basados en los requerimientos (no solo documentos subidos)
+        const documentStatus = {
+          total: employee.document_requirements?.length || 0, // Total de documentos ASIGNADOS
+          active: employeeDocuments.filter(doc => doc.status === 'active').length,
+          expired: employeeDocuments.filter(doc => doc.status === 'expired').length,
+          expiring_soon: employeeDocuments.filter(doc => {
+            if (doc.expiration_date) {
+              const expirationDate = new Date(doc.expiration_date);
+              const now = new Date();
+              const daysUntilExpiration = Math.ceil((expirationDate - now) / (1000 * 60 * 60 * 24));
+              return daysUntilExpiration > 0 && daysUntilExpiration <= 30;
+            }
+            return false;
+          }).length,
+          pending: employee.document_requirements?.filter(req =>
+            req.status === 'pending' || req.status === 'pendiente' || !req.document_id
+          ).length || 0
+        };
+
         const requirementStatus = this.calculateRequirementStatus(employee.document_requirements);
 
         return {

@@ -1291,15 +1291,17 @@ const EmployeeManagement = () => {
     // Obtener actividades específicas del empleado
     const activities = getEmployeeActivities();
 
-    // Calcular estadísticas reales basadas en los documentos asignados
+    // Calcular estadísticas reales basadas en los documentos asignados (soporte español e inglés)
     const documentStats = {
       total: documents.length,
-      aprobado: documents.filter(d => d.status === 'aprobado').length,
-      pendiente: documents.filter(d => d.status === 'pendiente').length,
-      rechazado: documents.filter(d => d.status === 'rechazado').length,
-      subido: documents.filter(d => d.status === 'subido').length,
+      aprobado: documents.filter(d => d.status === 'aprobado' || d.status === 'approved').length,
+      pendiente: documents.filter(d => d.status === 'pendiente' || d.status === 'pending').length,
+      rechazado: documents.filter(d => d.status === 'rechazado' || d.status === 'rejected').length,
+      subido: documents.filter(d => d.status === 'subido' || d.status === 'uploaded').length,
       vencido: 0,
-      completionRate: documents.length > 0 ? Math.round((documents.filter(d => d.status === 'aprobado').length / documents.length) * 100) : 0
+      completionRate: documents.length > 0
+        ? Math.round((documents.filter(d => d.status === 'aprobado' || d.status === 'approved').length / documents.length) * 100)
+        : 0
     };
 
     const getStatusIcon = (status) => {
