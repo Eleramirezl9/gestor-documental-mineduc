@@ -99,6 +99,52 @@ const mockNotifications = [
   }
 ];
 
+const mockEmployees = [
+  {
+    id: 'test-employee-id',
+    email: 'empleado.test@mineduc.gob.gt',
+    first_name: 'Juan',
+    last_name: 'Pérez',
+    department: 'TI',
+    employee_id: 'MIN25100',
+    phone: '+502 2411-9500',
+    position: 'Desarrollador',
+    hire_date: '2024-01-01',
+    is_active: true,
+    created_at: '2024-01-01T08:00:00Z'
+  },
+  {
+    id: 'test-employee-with-docs',
+    email: 'empleado.docs@mineduc.gob.gt',
+    first_name: 'María',
+    last_name: 'González',
+    department: 'Recursos Humanos',
+    employee_id: 'MIN25101',
+    phone: '+502 2411-9501',
+    position: 'Analista',
+    hire_date: '2024-02-01',
+    is_active: true,
+    created_at: '2024-02-01T08:00:00Z'
+  }
+];
+
+const mockEmployeeDocuments = [
+  {
+    id: 'emp-doc-1',
+    employee_id: 'test-employee-with-docs',
+    document_type: 'DPI',
+    status: 'approved',
+    created_at: '2024-02-01T08:00:00Z'
+  },
+  {
+    id: 'emp-doc-2',
+    employee_id: 'test-employee-with-docs',
+    document_type: 'Certificado Médico',
+    status: 'pending',
+    created_at: '2024-02-01T08:00:00Z'
+  }
+];
+
 // Mock de Supabase client
 const createMockSupabaseClient = () => {
   const mockQuery = {
@@ -124,6 +170,10 @@ const createMockSupabaseClient = () => {
           return mockInvitations;
         case 'notifications':
           return mockNotifications;
+        case 'employees':
+          return [...mockEmployees];
+        case 'employee_document_requirements':
+          return [...mockEmployeeDocuments];
         default:
           return [];
       }
@@ -198,6 +248,24 @@ const createMockSupabaseClient = () => {
 
     delete: function() {
       this.isDelete = true;
+
+      // Actually remove items from mock data arrays
+      if (this.table === 'employees') {
+        const idsToDelete = this.data.map(item => item.id);
+        const index = mockEmployees.findIndex(emp => idsToDelete.includes(emp.id));
+        if (index !== -1) {
+          mockEmployees.splice(index, 1);
+        }
+      } else if (this.table === 'employee_document_requirements') {
+        const idsToDelete = this.data.map(item => item.id);
+        idsToDelete.forEach(id => {
+          const index = mockEmployeeDocuments.findIndex(doc => doc.id === id);
+          if (index !== -1) {
+            mockEmployeeDocuments.splice(index, 1);
+          }
+        });
+      }
+
       return this;
     },
 
@@ -260,10 +328,15 @@ const createMockSupabaseClient = () => {
   };
 };
 
+const mockSupabaseClient = createMockSupabaseClient();
+
 module.exports = {
-  supabase: createMockSupabaseClient(),
+  supabase: mockSupabaseClient,
+  supabaseAdmin: mockSupabaseClient, // Same mock for admin
   mockUsers,
   mockDocuments,
   mockInvitations,
-  mockNotifications
+  mockNotifications,
+  mockEmployees,
+  mockEmployeeDocuments
 };

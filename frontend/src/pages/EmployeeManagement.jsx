@@ -1015,11 +1015,8 @@ const EmployeeManagement = () => {
     try {
       setLoading(true);
 
-      // TODO: Descomentar cuando esté lista la API
-      // await employeesAPI.deleteEmployee(employeeId);
-
-      // Simulación de eliminación (remover cuando la API esté lista)
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Llamar al endpoint DELETE
+      await employeesAPI.deleteEmployee(employeeId);
 
       toast.success('Empleado eliminado correctamente');
 
@@ -1030,9 +1027,13 @@ const EmployeeManagement = () => {
       // Actualizar lista de empleados (remover el eliminado)
       setEmployees(prev => prev.filter(emp => emp.id !== employeeId));
 
+      // Recargar lista de empleados para asegurar sincronización
+      loadEmployees();
+
     } catch (error) {
       console.error('Error al eliminar empleado:', error);
-      toast.error('Error al eliminar empleado');
+      const errorMessage = error.response?.data?.error || error.message || 'Error al eliminar empleado';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
       setDeleteDialog({ open: false, employeeId: null, employeeName: '' });
@@ -1442,7 +1443,7 @@ const EmployeeManagement = () => {
       const documentosContent = (
         <div className="space-y-4">
           {/* Estadísticas de documentos - Estilo compacto */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between">
                 <div>
@@ -1480,6 +1481,16 @@ const EmployeeManagement = () => {
                   <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400 mt-1">{documents.filter(d => d.status === 'pending' || d.status === 'pendiente').length}</p>
                 </div>
                 <Clock className="h-8 w-8 text-yellow-500" />
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-red-200 dark:border-red-900">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-red-700 dark:text-red-400 font-medium">Rechazados</p>
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{documents.filter(d => d.status === 'rejected' || d.status === 'rechazado').length}</p>
+                </div>
+                <XCircle className="h-8 w-8 text-red-500" />
               </div>
             </div>
           </div>
@@ -2438,20 +2449,20 @@ const EmployeeManagement = () => {
                 {deleteDialog.employeeName}
               </strong>
               .
-              <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                <p className="text-sm text-amber-800 dark:text-amber-200">
-                  ⚠️ Esta acción eliminará:
-                </p>
-                <ul className="mt-2 text-sm text-amber-700 dark:text-amber-300 space-y-1 list-disc list-inside">
-                  <li>Información del empleado</li>
-                  <li>Documentos asociados</li>
-                  <li>Historial de actividad</li>
-                </ul>
-              </div>
-              <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-300">
-                Esta acción no se puede deshacer.
-              </p>
             </AlertDialogDescription>
+            <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                ⚠️ Esta acción eliminará:
+              </p>
+              <ul className="mt-2 text-sm text-amber-700 dark:text-amber-300 space-y-1 list-disc list-inside">
+                <li>Información del empleado</li>
+                <li>Documentos asociados</li>
+                <li>Historial de actividad</li>
+              </ul>
+            </div>
+            <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Esta acción no se puede deshacer.
+            </p>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:gap-2">
             <AlertDialogCancel className="mt-0">

@@ -219,19 +219,22 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
                             {document?.description || 'Sin descripción'}
                           </div>
                           <div className="space-y-1 text-xs">
-                            <div className="flex items-center gap-4 text-gray-500">
-                              <span>Prioridad: <span className={`font-medium ${
-                                assignment.priority === 'urgente' ? 'text-red-600' :
-                                assignment.priority === 'alta' ? 'text-orange-600' :
-                                'text-green-600'
-                              }`}>{
-                                assignment.priority === 'urgente' ? 'Urgente' :
-                                assignment.priority === 'alta' ? 'Alta' :
-                                assignment.priority === 'baja' ? 'Baja' :
-                                'Normal'
-                              }</span></span>
+                            <div className="flex items-center gap-4">
+                              <span className="text-gray-600 dark:text-gray-400">
+                                Prioridad: <span className={`font-medium ${
+                                  assignment.priority === 'urgente' ? 'text-red-600 dark:text-red-400' :
+                                  assignment.priority === 'alta' ? 'text-orange-600 dark:text-orange-400' :
+                                  assignment.priority === 'baja' ? 'text-gray-600 dark:text-gray-400' :
+                                  'text-green-600 dark:text-green-400'
+                                }`}>{
+                                  assignment.priority === 'urgente' ? 'Urgente' :
+                                  assignment.priority === 'alta' ? 'Alta' :
+                                  assignment.priority === 'baja' ? 'Baja' :
+                                  'Normal'
+                                }</span>
+                              </span>
                               {assignment.dueDate && (
-                                <span className={isOverdue ? 'text-red-600 font-medium' : ''}>
+                                <span className={`text-gray-600 dark:text-gray-400 ${isOverdue ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}>
                                   Vence: {new Date(assignment.dueDate).toLocaleDateString('es-GT', {
                                     year: 'numeric',
                                     month: 'short',
@@ -240,18 +243,21 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
                                   {daysLeft !== null && ` (${daysLeft > 0 ? `${daysLeft} días` : 'Vencido'})`}
                                 </span>
                               )}
-                              <span>Estado: <span className={`font-medium ${
-                                assignment.status === 'aprobado' ? 'text-green-600' :
-                                assignment.status === 'rechazado' ? 'text-red-600' :
-                                assignment.status === 'subido' ? 'text-blue-600' :
-                                'text-yellow-600'
-                              }`}>{
-                                assignment.status === 'aprobado' ? 'Aprobado' :
-                                assignment.status === 'rechazado' ? 'Rechazado' :
-                                assignment.status === 'subido' ? 'Subido' :
-                                assignment.status === 'pending' ? 'Pendiente' :
-                                assignment.status
-                              }</span></span>
+                              <span className="text-gray-600 dark:text-gray-400">
+                                Estado: <span className={`font-medium ${
+                                  assignment.status === 'approved' || assignment.status === 'aprobado' ? 'text-green-600 dark:text-green-400' :
+                                  assignment.status === 'rejected' || assignment.status === 'rechazado' ? 'text-red-600 dark:text-red-400' :
+                                  assignment.status === 'uploaded' || assignment.status === 'subido' ? 'text-blue-600 dark:text-blue-400' :
+                                  assignment.status === 'pending' || assignment.status === 'pendiente' ? 'text-yellow-600 dark:text-yellow-400' :
+                                  'text-gray-600 dark:text-gray-400'
+                                }`}>{
+                                  assignment.status === 'approved' || assignment.status === 'aprobado' ? 'Aprobado' :
+                                  assignment.status === 'rejected' || assignment.status === 'rechazado' ? 'Rechazado' :
+                                  assignment.status === 'uploaded' || assignment.status === 'subido' ? 'Subido' :
+                                  assignment.status === 'pending' || assignment.status === 'pendiente' ? 'Pendiente' :
+                                  assignment.status
+                                }</span>
+                              </span>
                             </div>
                             {/* Renovación */}
                             {assignment.has_custom_renewal && assignment.custom_renewal_period ? (

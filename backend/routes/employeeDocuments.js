@@ -1031,4 +1031,112 @@ router.put('/requirement/:id/reject', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/employee-documents/employee/{id}:
+ *   delete:
+ *     summary: Eliminar un empleado y sus documentos asociados
+ *     tags: [Employee Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del empleado
+ *     responses:
+ *       200:
+ *         description: Empleado eliminado exitosamente
+ *       403:
+ *         description: No tiene permisos para eliminar empleados
+ *       404:
+ *         description: Empleado no encontrado
+ */
+router.delete('/employee/:id', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log('🗑️  Eliminando empleado:', id);
+
+    // Solo administradores pueden eliminar empleados
+    if (req.user.profile.role !== 'admin') {
+      return res.status(403).json({
+        error: 'Acceso denegado. Se requieren permisos de administrador.'
+      });
+    }
+
+    // Verificar que el empleado existe
+    const { data: employee, error: fetchError } = await supabaseAdmin
+      .from('employees')
+      .select('id, first_name, last_name, email')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !employee) {
+      return res.status(404).json({
+        success: false,
+        error: 'Empleado no encontrado'
+      });
+    }
+
+    // Eliminar documentos requeridos del empleado
+    const { error: deleteDocsError } = await supabaseAdmin
+      .from('employee_document_requirements')
+      .delete()
+      .eq('employee_id', id);
+
+    if (deleteDocsError) {
+      console.error('Error eliminando documentos del empleado:', deleteDocsError);
+      throw deleteDocsError;
+    }
+
+    // Eliminar el empleado (esto marcará is_active = false si usas soft delete)
+    const { error: deleteError } = await supabaseAdmin
+      .from('employees')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      console.error('Error eliminando empleado:', deleteError);
+      throw deleteError;
+    }
+
+    // Registrar en auditoría
+    try {
+      await auditService.log({
+        user_id: req.user.id,
+        action: 'delete_employee',
+        resource_type: 'employee',
+        resource_id: id,
+        details: {
+          employee_name: `${employee.first_name} ${employee.last_name}`,
+          employee_email: employee.email
+        }
+      });
+    } catch (auditError) {
+      console.warn('⚠️  Error registrando auditoría (no crítico):', auditError.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Empleado eliminado exitosamente',
+      employee: {
+        id: employee.id,
+        name: `${employee.first_name} ${employee.last_name}`
+      }
+    });
+
+  } catch (error) {
+    console.error('Error en DELETE /employee-documents/employee/:id:', error);
+    console.error('Stack trace:', error.stack);
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
 module.exports = router;

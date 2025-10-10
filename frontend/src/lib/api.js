@@ -323,6 +323,12 @@ export const employeesAPI = {
       notes
     })
   },
+
+  // Eliminar empleado
+  deleteEmployee: (employeeId) => {
+    cache.clear() // Limpiar caché al eliminar
+    return api.delete(`/employee-documents/employee/${employeeId}`)
+  },
 }
 
 export default api

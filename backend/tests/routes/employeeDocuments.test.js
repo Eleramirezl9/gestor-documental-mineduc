@@ -18,7 +18,9 @@ describe('Employee Documents API', () => {
       req.user = {
         id: 'user-1',
         email: 'admin@mineduc.gob.gt',
-        role: 'admin'
+        profile: {
+          role: 'admin'
+        }
       };
       next();
     });
@@ -395,6 +397,76 @@ describe('Employee Documents API', () => {
       expect(response.body).toHaveProperty('message');
       expect(response.body).toHaveProperty('notifications_created');
       expect(typeof response.body.notifications_created).toBe('number');
+    });
+  });
+
+  describe('DELETE /api/employee-documents/employee/:id', () => {
+    it('should delete employee and associated documents as admin', async () => {
+      const employeeId = 'test-employee-id';
+
+      const response = await request(app)
+        .delete(`/api/employee-documents/employee/${employeeId}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('message');
+      expect(response.body.message).toContain('eliminado exitosamente');
+      expect(response.body).toHaveProperty('employee');
+      expect(response.body.employee).toHaveProperty('id');
+      expect(response.body.employee).toHaveProperty('name');
+    });
+
+    it('should return 404 if employee does not exist', async () => {
+      const nonExistentId = 'non-existent-id';
+
+      const response = await request(app)
+        .delete(`/api/employee-documents/employee/${nonExistentId}`)
+        .expect(404);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toContain('no encontrado');
+    });
+
+    it('should require admin role to delete employee', async () => {
+      // Create app with non-admin user
+      const nonAdminApp = express();
+      nonAdminApp.use(express.json());
+
+      // Mock non-admin authentication
+      nonAdminApp.use((req, res, next) => {
+        req.user = {
+          id: 'user-2',
+          email: 'editor@mineduc.gob.gt',
+          profile: {
+            role: 'editor'
+          }
+        };
+        next();
+      });
+
+      nonAdminApp.use('/api/employee-documents', employeeDocumentsRouter);
+
+      const response = await request(nonAdminApp)
+        .delete('/api/employee-documents/employee/test-employee-id')
+        .expect(403);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toContain('Acceso denegado');
+    });
+
+    it('should delete all associated documents when deleting employee', async () => {
+      const employeeId = 'test-employee-with-docs';
+
+      const response = await request(app)
+        .delete(`/api/employee-documents/employee/${employeeId}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('message');
+
+      // Verify the employee was deleted
+      expect(response.body.employee).toHaveProperty('id', employeeId);
     });
   });
 });
