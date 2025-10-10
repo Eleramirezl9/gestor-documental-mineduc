@@ -3,7 +3,7 @@ const { body, query, validationResult } = require('express-validator');
 const { verifyToken } = require('../middleware/auth');
 const employeeDocumentService = require('../services/employeeDocumentService');
 const auditService = require('../services/auditService');
-const { supabase } = require('../config/supabase');
+const { supabase, supabaseAdmin } = require('../config/supabase');
 
 const router = express.Router();
 
@@ -836,7 +836,7 @@ router.put('/requirement/:id/approve', verifyToken, async (req, res) => {
     }
 
     // Obtener el documento actual
-    const { data: currentDoc, error: fetchError } = await supabase
+    const { data: currentDoc, error: fetchError } = await supabaseAdmin
       .from('employee_document_requirements')
       .select(`
         *,
@@ -853,7 +853,7 @@ router.put('/requirement/:id/approve', verifyToken, async (req, res) => {
     }
 
     // Actualizar el documento a estado aprobado
-    const { data: updatedDoc, error: updateError } = await supabase
+    const { data: updatedDoc, error: updateError } = await supabaseAdmin
       .from('employee_document_requirements')
       .update({
         status: 'approved',
@@ -958,7 +958,7 @@ router.put('/requirement/:id/reject', verifyToken, async (req, res) => {
     }
 
     // Obtener el documento actual
-    const { data: currentDoc, error: fetchError } = await supabase
+    const { data: currentDoc, error: fetchError } = await supabaseAdmin
       .from('employee_document_requirements')
       .select(`
         *,
@@ -975,7 +975,7 @@ router.put('/requirement/:id/reject', verifyToken, async (req, res) => {
     }
 
     // Actualizar el documento a estado rechazado
-    const { data: updatedDoc, error: updateError } = await supabase
+    const { data: updatedDoc, error: updateError } = await supabaseAdmin
       .from('employee_document_requirements')
       .update({
         status: 'rejected',
