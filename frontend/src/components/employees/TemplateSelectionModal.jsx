@@ -74,9 +74,9 @@ const TemplateSelectionModal = ({ open, onOpenChange, templates, onSelectTemplat
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent hideCloseButton={true} className="max-w-4xl p-0 gap-0 bg-purple-50/50 dark:bg-gray-900">
+      <DialogContent hideCloseButton={true} className="max-w-4xl p-0 gap-0 bg-purple-50/50 dark:bg-gray-900 flex flex-col max-h-[90vh]">
         {/* Header más grande */}
-        <div className="px-8 py-5 flex items-center justify-between border-b border-purple-100 dark:border-gray-700">
+        <div className="px-8 py-5 flex items-center justify-between border-b border-purple-100 dark:border-gray-700 shrink-0">
           <div className="flex items-center gap-3">
             <Package className="h-6 w-6 text-purple-600" />
             <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -94,14 +94,14 @@ const TemplateSelectionModal = ({ open, onOpenChange, templates, onSelectTemplat
         </div>
 
         {/* Descripción más grande */}
-        <div className="px-8 pt-4 pb-2">
+        <div className="px-8 pt-4 pb-2 shrink-0">
           <DialogDescription className="text-base text-gray-600 dark:text-gray-400">
             Selecciona una plantilla predefinida para aplicar automáticamente un conjunto de documentos requeridos según el cargo o función del empleado.
           </DialogDescription>
         </div>
 
         {/* Contenido principal con fondo morado claro */}
-        <div className="px-8 py-5 max-h-[65vh] overflow-y-auto">
+        <div className="px-8 py-5 overflow-y-auto flex-1">
           {templates.length === 0 ? (
             // Estado vacío con diseño centrado
             <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -220,7 +220,7 @@ const TemplateSelectionModal = ({ open, onOpenChange, templates, onSelectTemplat
         </div>
 
         {/* Footer con botón Cancelar más grande */}
-        <div className="px-8 py-4 flex justify-end border-t border-gray-200 dark:border-gray-700">
+        <div className="px-8 py-4 flex justify-end border-t border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-800">
           <Button
             onClick={() => onOpenChange(false)}
             variant="outline"

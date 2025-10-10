@@ -141,7 +141,7 @@ const CreateTemplateModal = ({ open, onOpenChange, allAvailableDocuments, onSucc
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Package className="h-5 w-5 text-purple-600" />
@@ -152,7 +152,8 @@ const CreateTemplateModal = ({ open, onOpenChange, allAvailableDocuments, onSucc
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="space-y-6 overflow-y-auto flex-1 px-1">
           {/* Información básica */}
           <div className="space-y-4">
             <h3 className="font-semibold text-lg">Información de la Plantilla</h3>
@@ -325,9 +326,10 @@ const CreateTemplateModal = ({ open, onOpenChange, allAvailableDocuments, onSucc
               </div>
             )}
           </div>
+          </div>
 
           {/* Botones */}
-          <div className="flex justify-end gap-3 pt-4 border-t sticky bottom-0 bg-white dark:bg-gray-800">
+          <div className="flex justify-end gap-3 pt-4 border-t bg-white dark:bg-gray-800 shrink-0">
             <Button
               type="button"
               variant="outline"

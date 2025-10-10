@@ -328,9 +328,29 @@ const EmployeeManagement = () => {
     console.log('🔄 Actualizando requerimientos en tiempo real:', { eventType, requirement, oldRequirement });
 
     // Recargar los empleados para actualizar sus estados de documentos
-    // Esto es más simple que actualizar manualmente los estados complejos
     loadEmployees();
-  }, []);
+
+    // Si hay un empleado seleccionado y el requerimiento es de ese empleado, recargar sus documentos
+    if (selectedEmployee && requirement.employee_id === selectedEmployee.id) {
+      console.log('🔄 Recargando documentos del empleado seleccionado...');
+      reloadProfileDocuments();
+
+      // Mostrar notificación específica según el tipo de cambio
+      if (eventType === 'UPDATE' && oldRequirement && requirement.status !== oldRequirement.status) {
+        const statusMessages = {
+          approved: 'aprobado ✅',
+          rejected: 'rechazado ❌',
+          submitted: 'enviado 📤',
+          pending: 'pendiente ⏳'
+        };
+        const statusText = statusMessages[requirement.status] || requirement.status;
+        toast(`Documento "${requirement.document_type}" ${statusText}`, {
+          duration: 4000,
+          icon: '🔔'
+        });
+      }
+    }
+  }, [selectedEmployee, reloadProfileDocuments]);
 
   // Configurar actualizaciones en tiempo real
   const { sendTestUpdate } = useEmployeeRealtimeUpdates(handleEmployeeUpdate, handleRequirementUpdate);
@@ -1619,22 +1639,33 @@ const EmployeeManagement = () => {
                           </Button>
                         )}
 
-                        {/* Aprobar/Rechazar solo si está subido o pendiente de aprobación */}
-                        {(docStatus === 'subido' || docStatus === 'pending') && (
+                        {/* Aprobar/Rechazar solo si está subido, submitted o pendiente de aprobación */}
+                        {(docStatus === 'subido' || docStatus === 'pending' || docStatus === 'submitted') && (
                           <div className="flex gap-2 ml-auto">
                             <Button
                               size="sm"
                               className="h-9 px-4 text-xs font-medium bg-[#27AE60] hover:bg-[#229954] text-white shadow-sm hover:shadow-md transition-all focus:ring-2 focus:ring-offset-2 focus:ring-[#27AE60]"
                               onClick={async () => {
                                 try {
-                                  await updateProfileDocument(doc.id, { status: 'approved' });
-                                  toast.success(`Documento "${docName}" aprobado`);
-                                  reloadProfileDocuments();
+                                  setLoading(true);
+                                  const { employeesAPI } = await import('../lib/api');
+                                  await employeesAPI.approveDocument(doc.id);
+                                  toast.success(`Documento "${docName}" aprobado exitosamente`, {
+                                    icon: '✅',
+                                    duration: 4000
+                                  });
+                                  // Recargar documentos del perfil
+                                  await reloadProfileDocuments();
                                 } catch (error) {
-                                  console.error('Error aprobando:', error);
-                                  toast.error('Error al aprobar documento');
+                                  console.error('Error aprobando documento:', error);
+                                  toast.error(error.response?.data?.error || 'Error al aprobar documento', {
+                                    duration: 5000
+                                  });
+                                } finally {
+                                  setLoading(false);
                                 }
                               }}
+                              disabled={loading}
                               aria-label={`Aprobar documento ${docName}`}
                               title="Aprobar este documento"
                             >
@@ -1647,17 +1678,25 @@ const EmployeeManagement = () => {
                               onClick={async () => {
                                 const motivo = prompt('Motivo del rechazo (opcional):');
                                 try {
-                                  await updateProfileDocument(doc.id, {
-                                    status: 'rejected',
-                                    notes: motivo ? `${notes || ''}\n\nRechazado: ${motivo}` : notes
+                                  setLoading(true);
+                                  const { employeesAPI } = await import('../lib/api');
+                                  await employeesAPI.rejectDocument(doc.id, motivo || 'No especificado');
+                                  toast.success(`Documento "${docName}" rechazado`, {
+                                    icon: '❌',
+                                    duration: 4000
                                   });
-                                  toast.success(`Documento "${docName}" rechazado`);
-                                  reloadProfileDocuments();
+                                  // Recargar documentos del perfil
+                                  await reloadProfileDocuments();
                                 } catch (error) {
-                                  console.error('Error rechazando:', error);
-                                  toast.error('Error al rechazar documento');
+                                  console.error('Error rechazando documento:', error);
+                                  toast.error(error.response?.data?.error || 'Error al rechazar documento', {
+                                    duration: 5000
+                                  });
+                                } finally {
+                                  setLoading(false);
                                 }
                               }}
+                              disabled={loading}
                               aria-label={`Rechazar documento ${docName}`}
                               title="Rechazar este documento"
                             >

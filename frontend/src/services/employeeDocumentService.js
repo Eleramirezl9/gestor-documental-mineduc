@@ -261,6 +261,41 @@ export const updateRequiredDocument = async (requirementId, updates) => {
 };
 
 /**
+ * Aprobar documento requerido de empleado
+ * @param {string} requirementId - ID del requerimiento
+ * @param {string} notes - Notas adicionales sobre la aprobación
+ * @returns {Promise<Object>} Documento aprobado
+ */
+export const approveRequiredDocument = async (requirementId, notes = null) => {
+  try {
+    const { employeesAPI } = await import('../lib/api');
+    const response = await employeesAPI.approveDocument(requirementId, notes);
+    return response.data;
+  } catch (error) {
+    console.error('Error aprobando documento:', error);
+    throw error;
+  }
+};
+
+/**
+ * Rechazar documento requerido de empleado
+ * @param {string} requirementId - ID del requerimiento
+ * @param {string} rejectionReason - Motivo del rechazo
+ * @param {string} notes - Notas adicionales
+ * @returns {Promise<Object>} Documento rechazado
+ */
+export const rejectRequiredDocument = async (requirementId, rejectionReason = null, notes = null) => {
+  try {
+    const { employeesAPI } = await import('../lib/api');
+    const response = await employeesAPI.rejectDocument(requirementId, rejectionReason, notes);
+    return response.data;
+  } catch (error) {
+    console.error('Error rechazando documento:', error);
+    throw error;
+  }
+};
+
+/**
  * Actualizar documento asignado a empleado
  * @param {string} assignmentId - ID de la asignación
  * @param {Object} updates - Datos a actualizar (priority, dueDate, notes)

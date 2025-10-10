@@ -651,7 +651,10 @@ router.post('/employee/:id/requirements', verifyToken, [
 
   } catch (error) {
     console.error('Error en POST /employee-documents/employee/:id/requirements:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -783,6 +786,226 @@ router.get('/next-id', verifyToken, async (req, res) => {
       error: 'Error interno del servidor',
       message: 'No se pudo generar el próximo ID de empleado'
     });
+  }
+});
+
+/**
+ * @swagger
+ * /api/employee-documents/requirement/{id}/approve:
+ *   put:
+ *     summary: Aprobar un documento requerido de empleado
+ *     tags: [Employee Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del requerimiento de documento
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               notes:
+ *                 type: string
+ *                 description: Notas adicionales sobre la aprobación
+ *     responses:
+ *       200:
+ *         description: Documento aprobado exitosamente
+ *       403:
+ *         description: No tiene permisos para aprobar documentos
+ *       404:
+ *         description: Documento no encontrado
+ */
+router.put('/requirement/:id/approve', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+
+    console.log('✅ Aprobando documento requirement:', id);
+
+    // Solo administradores y editores pueden aprobar documentos
+    if (!['admin', 'editor'].includes(req.user.profile.role)) {
+      return res.status(403).json({
+        error: 'Acceso denegado. Se requieren permisos de administrador o editor.'
+      });
+    }
+
+    // Obtener el documento actual
+    const { data: currentDoc, error: fetchError } = await supabase
+      .from('employee_document_requirements')
+      .select(`
+        *,
+        employee:employees(id, first_name, last_name, email)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !currentDoc) {
+      return res.status(404).json({
+        success: false,
+        error: 'Documento no encontrado'
+      });
+    }
+
+    // Actualizar el documento a estado aprobado
+    const { data: updatedDoc, error: updateError } = await supabase
+      .from('employee_document_requirements')
+      .update({
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: req.user.id,
+        updated_by: req.user.id,
+        notes: notes || currentDoc.notes
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        employee:employees(id, first_name, last_name, email)
+      `)
+      .single();
+
+    if (updateError) throw updateError;
+
+    // Registrar en auditoría
+    await auditService.log({
+      user_id: req.user.id,
+      action: 'approve_employee_document',
+      resource_type: 'employee_document_requirement',
+      resource_id: id,
+      details: {
+        employee_id: currentDoc.employee_id,
+        employee_name: currentDoc.employee ? `${currentDoc.employee.first_name} ${currentDoc.employee.last_name}` : 'Desconocido',
+        document_type: currentDoc.document_type,
+        previous_status: currentDoc.status
+      }
+    });
+
+    res.json({
+      success: true,
+      document: updatedDoc,
+      message: 'Documento aprobado exitosamente'
+    });
+
+  } catch (error) {
+    console.error('Error en PUT /employee-documents/requirement/:id/approve:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/employee-documents/requirement/{id}/reject:
+ *   put:
+ *     summary: Rechazar un documento requerido de empleado
+ *     tags: [Employee Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del requerimiento de documento
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               rejection_reason:
+ *                 type: string
+ *                 description: Motivo del rechazo
+ *               notes:
+ *                 type: string
+ *                 description: Notas adicionales
+ *     responses:
+ *       200:
+ *         description: Documento rechazado exitosamente
+ *       403:
+ *         description: No tiene permisos para rechazar documentos
+ *       404:
+ *         description: Documento no encontrado
+ */
+router.put('/requirement/:id/reject', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rejection_reason, notes } = req.body;
+
+    console.log('❌ Rechazando documento requirement:', id);
+
+    // Solo administradores y editores pueden rechazar documentos
+    if (!['admin', 'editor'].includes(req.user.profile.role)) {
+      return res.status(403).json({
+        error: 'Acceso denegado. Se requieren permisos de administrador o editor.'
+      });
+    }
+
+    // Obtener el documento actual
+    const { data: currentDoc, error: fetchError } = await supabase
+      .from('employee_document_requirements')
+      .select(`
+        *,
+        employee:employees(id, first_name, last_name, email)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !currentDoc) {
+      return res.status(404).json({
+        success: false,
+        error: 'Documento no encontrado'
+      });
+    }
+
+    // Actualizar el documento a estado rechazado
+    const { data: updatedDoc, error: updateError } = await supabase
+      .from('employee_document_requirements')
+      .update({
+        status: 'rejected',
+        rejected_at: new Date().toISOString(),
+        updated_by: req.user.id,
+        rejection_reason: rejection_reason || 'No especificado',
+        notes: notes || currentDoc.notes
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        employee:employees(id, first_name, last_name, email)
+      `)
+      .single();
+
+    if (updateError) throw updateError;
+
+    // Registrar en auditoría
+    await auditService.log({
+      user_id: req.user.id,
+      action: 'reject_employee_document',
+      resource_type: 'employee_document_requirement',
+      resource_id: id,
+      details: {
+        employee_id: currentDoc.employee_id,
+        employee_name: currentDoc.employee ? `${currentDoc.employee.first_name} ${currentDoc.employee.last_name}` : 'Desconocido',
+        document_type: currentDoc.document_type,
+        previous_status: currentDoc.status,
+        rejection_reason: rejection_reason || 'No especificado'
+      }
+    });
+
+    res.json({
+      success: true,
+      document: updatedDoc,
+      message: 'Documento rechazado exitosamente'
+    });
+
+  } catch (error) {
+    console.error('Error en PUT /employee-documents/requirement/:id/reject:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 

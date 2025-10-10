@@ -308,6 +308,21 @@ export const employeesAPI = {
 
   // Obtener documentos por vencer
   getExpiringDocuments: (days) => api.get(`/employee-documents/expiring?days=${days || 30}`),
+
+  // Aprobar documento requerido de empleado
+  approveDocument: (requirementId, notes) => {
+    cache.clear() // Limpiar caché al aprobar
+    return api.put(`/employee-documents/requirement/${requirementId}/approve`, { notes })
+  },
+
+  // Rechazar documento requerido de empleado
+  rejectDocument: (requirementId, rejectionReason, notes) => {
+    cache.clear() // Limpiar caché al rechazar
+    return api.put(`/employee-documents/requirement/${requirementId}/reject`, {
+      rejection_reason: rejectionReason,
+      notes
+    })
+  },
 }
 
 export default api

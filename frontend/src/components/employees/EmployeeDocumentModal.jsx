@@ -148,7 +148,7 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
       <DialogContent
-        className="max-w-5xl max-h-[90vh] overflow-hidden"
+        className="max-w-5xl max-h-[90vh] flex flex-col"
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
       >
@@ -162,7 +162,7 @@ const EmployeeDocumentModal = ({ open, onOpenChange, employee, onSuccess }) => {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col space-y-6 max-h-[70vh] overflow-y-auto">
+        <div className="flex flex-col space-y-6 overflow-y-auto flex-1 px-1">
           {/* Información del Empleado */}
           <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">

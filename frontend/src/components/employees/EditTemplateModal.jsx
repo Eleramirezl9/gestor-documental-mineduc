@@ -137,9 +137,9 @@ const EditTemplateModal = ({ open, onOpenChange, template, allAvailableDocuments
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent hideCloseButton={true} className="max-w-5xl max-h-[90vh] overflow-hidden p-0">
+      <DialogContent hideCloseButton={true} className="max-w-5xl max-h-[90vh] flex flex-col p-0">
         {/* Header */}
-        <div className="px-6 py-4 border-b flex items-center justify-between">
+        <div className="px-6 py-4 border-b flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Pencil className="h-5 w-5 text-blue-600" />
             <DialogTitle className="text-xl font-semibold">Editar Plantilla de Documentos</DialogTitle>
@@ -155,7 +155,7 @@ const EditTemplateModal = ({ open, onOpenChange, template, allAvailableDocuments
         </div>
 
         {/* Formulario */}
-        <form onSubmit={handleSubmit} className="flex flex-col h-full">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="px-6 py-4 overflow-y-auto flex-1">
             <DialogDescription className="text-sm text-gray-600 mb-6">
               Edita la información de la plantilla y los documentos incluidos.
@@ -274,7 +274,7 @@ const EditTemplateModal = ({ open, onOpenChange, template, allAvailableDocuments
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t flex justify-end gap-3">
+          <div className="px-6 py-4 border-t flex justify-end gap-3 shrink-0 bg-white dark:bg-gray-800">
             <Button
               type="button"
               onClick={() => onOpenChange(false)}
