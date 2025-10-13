@@ -40,5 +40,9 @@
     "supabase"
   ],
   "author": "MINEDUC Development Team",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "pdf-parse": "^2.2.9",
+    "sharp": "^0.34.4"
+  }
 }

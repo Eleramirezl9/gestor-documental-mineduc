@@ -9,7 +9,8 @@ import { toast } from 'react-hot-toast';
 export const useEmployeeRealtimeUpdates = (onEmployeeUpdate, onRequirementUpdate) => {
   // Función para manejar inserción de empleados
   const handleEmployeeInsert = useCallback((payload) => {
-    console.log('🔔 Nuevo empleado agregado:', payload.new);
+    // console.log('🔔 Nuevo empleado agregado:', payload.new);
+    // Solo mostrar toast para nuevos empleados (no para reconexiones)
     toast.success(`Nuevo empleado registrado: ${payload.new.first_name} ${payload.new.last_name}`);
     if (onEmployeeUpdate) {
       onEmployeeUpdate('INSERT', payload.new);
@@ -18,8 +19,8 @@ export const useEmployeeRealtimeUpdates = (onEmployeeUpdate, onRequirementUpdate
 
   // Función para manejar actualización de empleados
   const handleEmployeeUpdate = useCallback((payload) => {
-    console.log('🔔 Empleado actualizado:', payload.new);
-    toast(`Empleado actualizado: ${payload.new.first_name} ${payload.new.last_name}`, { icon: 'ℹ️' });
+    // console.log('🔔 Empleado actualizado:', payload.new);
+    // No mostrar toast para actualizaciones, solo actualizar datos
     if (onEmployeeUpdate) {
       onEmployeeUpdate('UPDATE', payload.new, payload.old);
     }
@@ -27,7 +28,7 @@ export const useEmployeeRealtimeUpdates = (onEmployeeUpdate, onRequirementUpdate
 
   // Función para manejar eliminación de empleados
   const handleEmployeeDelete = useCallback((payload) => {
-    console.log('🔔 Empleado eliminado:', payload.old);
+    // console.log('🔔 Empleado eliminado:', payload.old);
     toast.error(`Empleado eliminado: ${payload.old.first_name} ${payload.old.last_name}`);
     if (onEmployeeUpdate) {
       onEmployeeUpdate('DELETE', payload.old);
@@ -36,31 +37,15 @@ export const useEmployeeRealtimeUpdates = (onEmployeeUpdate, onRequirementUpdate
 
   // Función para manejar cambios en requerimientos de documentos
   const handleRequirementChange = useCallback((payload) => {
-    console.log('🔔 Requerimiento de documento actualizado:', payload);
+    // console.log('🔔 Requerimiento de documento actualizado:', payload);
 
-    let message = '';
-    switch (payload.eventType) {
-      case 'INSERT':
-        message = `Nuevo requerimiento: ${payload.new.document_type}`;
-        toast(message, { icon: 'ℹ️' });
-        break;
-      case 'UPDATE':
-        if (payload.new.status !== payload.old.status) {
-          const statusMessages = {
-            pending: 'pendiente',
-            submitted: 'enviado',
-            approved: 'aprobado',
-            rejected: 'rechazado',
-            expired: 'vencido'
-          };
-          message = `Requerimiento ${statusMessages[payload.new.status]}: ${payload.new.document_type}`;
-          toast(message, { icon: 'ℹ️' });
-        }
-        break;
-      case 'DELETE':
-        message = `Requerimiento eliminado: ${payload.old.document_type}`;
-        toast.error(message);
-        break;
+    // Solo mostrar toasts para cambios importantes (aprobado/rechazado)
+    if (payload.eventType === 'UPDATE' && payload.new.status !== payload.old.status) {
+      if (payload.new.status === 'approved' || payload.new.status === 'aprobado') {
+        toast.success(`Documento aprobado: ${payload.new.document_type}`);
+      } else if (payload.new.status === 'rejected' || payload.new.status === 'rechazado') {
+        toast.error(`Documento rechazado: ${payload.new.document_type}`);
+      }
     }
 
     if (onRequirementUpdate) {
@@ -69,7 +54,7 @@ export const useEmployeeRealtimeUpdates = (onEmployeeUpdate, onRequirementUpdate
   }, [onRequirementUpdate]);
 
   useEffect(() => {
-    console.log('🔄 Configurando suscripciones en tiempo real para empleados...');
+    // console.log('🔄 Configurando suscripciones en tiempo real para empleados...');
 
     // Suscripción a cambios en empleados
     const employeeSubscription = supabase
@@ -102,12 +87,8 @@ export const useEmployeeRealtimeUpdates = (onEmployeeUpdate, onRequirementUpdate
         handleEmployeeDelete
       )
       .subscribe((status) => {
-        console.log('📡 Estado de suscripción empleados:', status);
-        if (status === 'SUBSCRIBED') {
-          toast.success('Conectado a actualizaciones en tiempo real');
-        } else if (status === 'CLOSED') {
-          toast.error('Conexión en tiempo real cerrada');
-        }
+        // console.log('📡 Estado de suscripción empleados:', status);
+        // NO mostrar toasts de conexión/desconexión para evitar spam en recargas
       });
 
     // Suscripción a cambios en requerimientos de documentos
@@ -123,12 +104,12 @@ export const useEmployeeRealtimeUpdates = (onEmployeeUpdate, onRequirementUpdate
         handleRequirementChange
       )
       .subscribe((status) => {
-        console.log('📡 Estado de suscripción requerimientos:', status);
+        // console.log('📡 Estado de suscripción requerimientos:', status);
       });
 
     // Cleanup function
     return () => {
-      console.log('🔄 Cerrando suscripciones en tiempo real...');
+      // console.log('🔄 Cerrando suscripciones en tiempo real...');
       employeeSubscription.unsubscribe();
       requirementSubscription.unsubscribe();
     };

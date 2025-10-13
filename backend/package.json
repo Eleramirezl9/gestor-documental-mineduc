@@ -28,6 +28,7 @@
     "npm": ">=8.0.0"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.55.0",
     "axios": "^1.11.0",
     "bcryptjs": "^3.0.2",
@@ -44,10 +45,11 @@
     "nodemailer": "^7.0.5",
     "openai": "^5.12.2",
     "pdf-parse": "^1.1.1",
+    "sharp": "^0.34.4",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "tesseract.js": "^6.0.1",
-    "xlsx": "^0.18.5"
+    "xlsx-populate": "^1.21.0"
   },
   "devDependencies": {
     "jest": "^30.0.5",

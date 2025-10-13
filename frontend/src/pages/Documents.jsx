@@ -49,6 +49,7 @@ import { documentsAPI } from '../lib/api'
 import DocumentUploadModal from '../components/DocumentUploadModal'
 import SimpleUploadModal from '../components/SimpleUploadModal'
 import DocumentGenerator from '../components/DocumentGenerator'
+import UploadDocumentDialog from '../components/documents/UploadDocumentDialog'
 import toast from 'react-hot-toast'
 
 const Documents = () => {
@@ -61,6 +62,7 @@ const Documents = () => {
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showSimpleUploadModal, setShowSimpleUploadModal] = useState(false)
   const [showDocumentGenerator, setShowDocumentGenerator] = useState(false)
+  const [showUploadDialog, setShowUploadDialog] = useState(false)
   
   // Estados para confirmación de eliminación
   const [deleteDialog, setDeleteDialog] = useState({ open: false, documentId: null, documentTitle: '' })
@@ -224,6 +226,11 @@ const Documents = () => {
     setShowSimpleUploadModal(false)
   }
 
+  const handleUploadSuccess = (newDocument) => {
+    loadDocuments() // Recargar toda la lista para obtener datos actualizados
+    toast.success('Documento subido exitosamente')
+  }
+
   const handleDocumentGenerated = (generatedDoc) => {
     toast.success(`${generatedDoc.type === 'pdf' ? 'PDF' : 'Excel'} generado: ${generatedDoc.fileName}`)
     setShowDocumentGenerator(false)
@@ -265,9 +272,9 @@ const Documents = () => {
             <FileText className="h-4 w-4 mr-2" />
             Nuevo Documento
           </Button>
-          <Button variant="outline" onClick={() => setShowSimpleUploadModal(true)}>
+          <Button variant="outline" onClick={() => setShowUploadDialog(true)}>
             <Upload className="h-4 w-4 mr-2" />
-            Subir Archivo
+            Subir Documento
           </Button>
         </div>
       </div>
@@ -471,6 +478,12 @@ const Documents = () => {
         isOpen={showDocumentGenerator}
         onClose={() => setShowDocumentGenerator(false)}
         onDocumentGenerated={handleDocumentGenerated}
+      />
+
+      <UploadDocumentDialog
+        isOpen={showUploadDialog}
+        onClose={() => setShowUploadDialog(false)}
+        onSuccess={handleUploadSuccess}
       />
 
       {/* Diálogo de confirmación para eliminar */}

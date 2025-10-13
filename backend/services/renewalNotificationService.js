@@ -68,6 +68,7 @@ async function getDocumentsExpiringIn(daysAhead = 30) {
     console.log(`📅 Hasta: ${targetDate.toISOString().split('T')[0]}`);
 
     // 1. Obtener todos los documentos asignados pendientes o subidos con required_date
+    // Soportar tanto nombres en inglés como español
     const { data: assignments, error: assignmentsError } = await supabaseAdmin
       .from('employee_document_requirements')
       .select(`
@@ -80,7 +81,7 @@ async function getDocumentsExpiringIn(daysAhead = 30) {
           email
         )
       `)
-      .in('status', ['pending', 'submitted'])
+      .in('status', ['pending', 'pendiente', 'submitted', 'subido'])
       .not('required_date', 'is', null)
       .gte('required_date', today.toISOString().split('T')[0])
       .lte('required_date', targetDate.toISOString().split('T')[0]);
@@ -149,6 +150,7 @@ async function getExpiredDocuments() {
     console.log(`📅 Hoy: ${today.toISOString().split('T')[0]}`);
 
     // Obtener documentos pendientes o submitted cuya required_date ya pasó
+    // Soportar tanto nombres en inglés como español
     const { data: assignments, error: assignmentsError } = await supabaseAdmin
       .from('employee_document_requirements')
       .select(`
@@ -161,7 +163,7 @@ async function getExpiredDocuments() {
           email
         )
       `)
-      .in('status', ['pending', 'submitted'])
+      .in('status', ['pending', 'pendiente', 'submitted', 'subido'])
       .not('required_date', 'is', null)
       .lt('required_date', today.toISOString().split('T')[0]);
 

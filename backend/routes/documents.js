@@ -1,13 +1,21 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs').promises;
 const { body, validationResult, query } = require('express-validator');
-const { supabase } = require('../config/supabase');
+const { supabase, supabaseAdmin } = require('../config/supabase');
 const { verifyToken, requireRole } = require('../middleware/auth');
 const auditService = require('../services/auditService');
-const ocrService = require('../services/ocrService');
-const aiService = require('../services/aiService');
+const {
+  processDocument,
+  validateFileType,
+} = require('../services/documentProcessingService');
+const {
+  uploadFile,
+  deleteFile,
+  getDownloadUrl,
+  checkUserQuota,
+  updateUserStorageUsage,
+} = require('../services/storageService');
 
 const router = express.Router();
 
@@ -106,39 +114,19 @@ const router = express.Router();
  *           description: Archivo a subir (PDF, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG, GIF)
  */
 
-// Configuración de multer para subida de archivos
-const storage = multer.diskStorage({
-  destination: async (req, file, cb) => {
-    const uploadsDir = path.join(__dirname, '..', 'uploads');
-    try {
-      await fs.mkdir(uploadsDir, { recursive: true });
-      cb(null, uploadsDir);
-    } catch (error) {
-      console.error('Error creando directorio uploads:', error);
-      cb(error);
-    }
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
+// Configurar multer para manejar archivos en memoria
 const upload = multer({
-  storage: storage,
+  storage: multer.memoryStorage(),
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB
+    fileSize: 50 * 1024 * 1024, // 50MB máximo
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'gif'];
-    const fileExtension = path.extname(file.originalname).toLowerCase().substring(1);
-    
-    if (allowedTypes.includes(fileExtension)) {
+    if (validateFileType(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new Error('Tipo de archivo no permitido'), false);
     }
-  }
+  },
 });
 
 /**
@@ -893,26 +881,26 @@ router.post('/', verifyToken, requireRole(['admin', 'editor']), [
  *         description: Error interno del servidor
  */
 router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.single('file'), [
-  body('title').trim().isLength({ min: 3, max: 255 }).withMessage('El título debe tener entre 3 y 255 caracteres'),
+  body('title').optional().trim().isLength({ min: 3, max: 255 }),
   body('description').optional().trim().isLength({ max: 1000 }),
   body('categoryId').optional(),
   body('tags').optional(),
-  body('isPublic').optional()
+  body('isPublic').optional(),
+  body('effectiveDate').optional(),
+  body('expirationDate').optional(),
+  body('priority').optional(),
+  body('folder').optional()
 ], async (req, res) => {
   try {
     console.log('📤 Document upload attempt:', {
       user: req.user?.profile?.email,
-      role: req.user?.profile?.role,
       hasFile: !!req.file,
       fileName: req.file?.originalname,
       fileSize: req.file?.size,
-      title: req.body?.title
     });
-    
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log('Validation errors:', errors.array());
-      if (req.file) await fs.unlink(req.file.path);
       return res.status(400).json({ errors: errors.array() });
     }
 
@@ -920,131 +908,175 @@ router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.sin
       return res.status(400).json({ error: 'No se proporcionó ningún archivo' });
     }
 
-    const { title, description, categoryId, isPublic } = req.body;
-    let tags = [];
-    
-    // Procesar tags si se proporcionaron
-    if (req.body.tags) {
-      tags = typeof req.body.tags === 'string' 
-        ? req.body.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
-        : Array.isArray(req.body.tags) ? req.body.tags : [];
-    }
-
-    // Subir archivo a Supabase Storage primero
-    console.log('📁 Reading file from:', req.file.path);
-    const fileBuffer = await fs.readFile(req.file.path);
-    const fileId = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const fileName = `documents/${fileId}/${req.file.filename}`;
-
-    console.log('☁️ Uploading to Supabase Storage:', fileName);
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('documents')
-      .upload(fileName, fileBuffer, {
-        contentType: req.file.mimetype,
-        upsert: true
-      });
-
-    if (uploadError) {
-      console.error('❌ Supabase upload error:', uploadError);
-      await fs.unlink(req.file.path).catch(console.error);
-      return res.status(400).json({ error: 'Error subiendo archivo: ' + uploadError.message });
-    }
-
-    console.log('✅ File uploaded to Supabase:', uploadData.path);
-
-    // Procesar archivo con OCR si es necesario
-    let extractedText = '';
-    try {
-      if (['pdf', 'jpg', 'jpeg', 'png'].includes(path.extname(req.file.originalname).toLowerCase().substring(1))) {
-        console.log('🔍 Procesando OCR para archivo:', req.file.originalname);
-        extractedText = await ocrService.extractText(req.file.path);
-        console.log('✅ OCR completado, caracteres extraídos:', extractedText.length);
-      }
-    } catch (ocrError) {
-      console.error('❌ Error en OCR:', ocrError.message);
-      // No fallar la subida si OCR falla, solo registrar el error
-    }
-
-    // Clasificación automática con IA
-    let aiClassification = null;
-    try {
-      if (extractedText) {
-        console.log('🤖 Iniciando clasificación IA...');
-        aiClassification = await aiService.classifyDocument(extractedText, req.file.originalname);
-        console.log('✅ Clasificación IA completada:', aiClassification?.category || 'Sin categoría');
-      }
-    } catch (aiError) {
-      console.error('❌ Error en clasificación IA:', aiError.message);
-      // No fallar la subida si IA falla, solo registrar el error
-    }
-
-    // Crear documento en la base de datos
-    console.log('💾 Creating document in database...');
-    const documentData = {
+    const userId = req.user.id;
+    const {
       title,
-      description: description || null,
-      file_name: req.file.originalname,
-      file_path: uploadData.path,
-      file_size: req.file.size,
-      file_type: path.extname(req.file.originalname).toLowerCase().substring(1),
-      mime_type: req.file.mimetype,
-      category_id: categoryId || null,
-      tags: tags,
-      status: 'pending',
-      is_public: isPublic === 'true',
-      extracted_text: extractedText,
-      ai_classification: aiClassification,
-      created_by: req.user.id
-    };
+      description,
+      categoryId,
+      tags,
+      isPublic,
+      effectiveDate,
+      expirationDate,
+      priority,
+      folder = 'general'
+    } = req.body;
 
-    console.log('Document data to insert:', { ...documentData, extracted_text: extractedText ? `${extractedText.length} chars` : 'none' });
+    // Verificar quota del usuario
+    const quotaCheck = await checkUserQuota(userId, req.file.size);
+    if (!quotaCheck.hasSpace) {
+      return res.status(413).json({
+        error: 'Cuota de almacenamiento excedida',
+        quota: {
+          used: quotaCheck.used,
+          limit: quotaCheck.limit,
+          available: quotaCheck.available,
+        }
+      });
+    }
 
-    const { data, error } = await supabase
+    // Procesar el documento (OCR, AI, etc.)
+    const {
+      fileHash,
+      extractedText,
+      aiClassification,
+      processedBuffer,
+      originalSize,
+      processedSize,
+      compressionRatio,
+    } = await processDocument(req.file);
+
+    // Verificar si ya existe un documento con el mismo hash
+    const { data: existingDoc } = await supabaseAdmin
       .from('documents')
-      .insert([documentData])
+      .select('id, title')
+      .eq('file_hash', fileHash)
+      .eq('created_by', userId)
+      .single();
+
+    if (existingDoc) {
+      return res.status(409).json({
+        error: 'Ya existe un documento idéntico',
+        existingDocument: existingDoc,
+      });
+    }
+
+    // Subir archivo a Supabase Storage
+    const { path: filePath, publicUrl } = await uploadFile(
+      processedBuffer,
+      req.file.originalname,
+      req.file.mimetype,
+      userId,
+      folder
+    );
+
+    // Determinar categoría (usar AI o la proporcionada)
+    let finalCategoryId = categoryId;
+    if (!finalCategoryId && aiClassification?.category) {
+      const { data: categoryData } = await supabaseAdmin
+        .from('categories')
+        .select('id')
+        .ilike('name', `%${aiClassification.category}%`)
+        .single();
+
+      if (categoryData) {
+        finalCategoryId = categoryData.id;
+      }
+    }
+
+    // Parsear tags
+    let parsedTags = [];
+    if (tags) {
+      parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+    }
+
+    // Agregar keywords de AI a los tags
+    if (aiClassification?.keywords) {
+      parsedTags = [...new Set([...parsedTags, ...aiClassification.keywords])];
+    }
+
+    // Crear registro en la base de datos
+    const { data: document, error: dbError } = await supabaseAdmin
+      .from('documents')
+      .insert({
+        title: title || req.file.originalname,
+        description: description || aiClassification?.summary,
+        file_name: req.file.originalname,
+        file_path: filePath,
+        file_size: processedSize,
+        file_type: req.file.mimetype.split('/')[1],
+        mime_type: req.file.mimetype,
+        category_id: finalCategoryId,
+        tags: parsedTags,
+        extracted_text: extractedText,
+        ai_classification: aiClassification,
+        status: 'pending',
+        is_public: isPublic === 'true' || isPublic === true,
+        effective_date: effectiveDate,
+        expiration_date: expirationDate,
+        created_by: userId,
+        file_hash: fileHash,
+        priority: priority || aiClassification?.priority || 'normal',
+        classification_level: aiClassification?.classificationLevel || 'public',
+        keywords: aiClassification?.keywords || [],
+        language: aiClassification?.language || 'es',
+      })
       .select()
       .single();
 
-    if (error) {
-      console.error('❌ Database insert error:', error);
-      // Si falla la creación del documento, eliminar el archivo subido
-      await supabase.storage.from('documents').remove([uploadData.path]).catch(console.error);
-      await fs.unlink(req.file.path).catch(console.error);
-      return res.status(400).json({ error: error.message });
+    if (dbError) {
+      // Si falla la inserción en DB, eliminar el archivo subido
+      await deleteFile(filePath);
+      console.error('Database error:', dbError);
+      throw new Error(`Error al guardar en base de datos: ${dbError.message}`);
     }
 
-    console.log('✅ Document created in database:', data.id);
+    // Actualizar uso de storage del usuario
+    await updateUserStorageUsage(userId, processedSize);
 
-    // Limpiar archivo temporal
-    await fs.unlink(req.file.path);
+    // Actualizar contador de documentos del usuario usando RPC
+    try {
+      await supabaseAdmin.rpc('increment_user_documents', { user_id: userId });
+    } catch (incrementError) {
+      console.warn('⚠️  Failed to increment user documents counter (non-critical):', incrementError.message);
+    }
 
-    // Registrar en auditoría
-    await auditService.log({
-      user_id: req.user.id,
-      action: 'DOCUMENT_CREATED_WITH_FILE',
-      entity_type: 'document',
-      entity_id: data.id,
-      details: { 
-        title,
-        file_name: req.file.originalname,
-        file_size: req.file.size,
-        has_ocr: !!extractedText,
-        has_ai_classification: !!aiClassification
-      },
-      ip_address: req.ip
-    });
+    // Registrar operación en logs (no crítico, no debe bloquear la operación)
+    try {
+      await auditService.log({
+        user_id: userId,
+        action: 'DOCUMENT_UPLOADED',
+        entity_type: 'document',
+        entity_id: document.id,
+        details: {
+          file_name: req.file.originalname,
+          file_size: processedSize,
+          original_size: originalSize,
+          compression_ratio: compressionRatio,
+          ai_classification: aiClassification,
+        },
+        ip_address: req.ip
+      });
+    } catch (auditError) {
+      console.warn('⚠️  Audit log failed (non-critical):', auditError.message);
+    }
+
+    console.log('✅ Document created successfully:', document.id);
 
     res.status(201).json({
-      message: 'Documento creado exitosamente',
-      document: data
+      message: 'Documento subido exitosamente',
+      document,
+      processing: {
+        compressionRatio,
+        extractedTextLength: extractedText?.length || 0,
+        aiClassification,
+      }
     });
 
   } catch (error) {
-    console.error('Error creando documento con archivo:', error);
-    if (req.file) {
-      await fs.unlink(req.file.path).catch(console.error);
-    }
-    res.status(500).json({ error: 'Error interno del servidor' });
+    console.error('Upload error:', error);
+    res.status(500).json({
+      error: error.message || 'Error al subir el documento'
+    });
   }
 });
 

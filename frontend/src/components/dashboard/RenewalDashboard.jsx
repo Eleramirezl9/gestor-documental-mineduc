@@ -281,6 +281,7 @@ function DocumentCard({ document, isExpired, employeesMap, navigate }) {
     : getUrgencyBadge(document.days_until_expiration);
 
   // Obtener información del empleado - puede venir del objeto employees anidado o del map
+  // El documento tiene employee_id (UUID), y employees es un objeto anidado de Supabase
   const employeeFromDoc = document.employees || employeesMap?.[document.employee_id];
 
   const employeeName = employeeFromDoc
@@ -344,11 +345,11 @@ function DocumentCard({ document, isExpired, employeesMap, navigate }) {
           variant="outline"
           size="sm"
           onClick={() => {
-            const empId = employeeFromDoc?.employee_id;
-            if (empId) {
-              navigate(`/employees/${empId}`);
+            // employeeCode es el employee_id (código como MIN25001) que se usa en la ruta
+            if (employeeCode) {
+              navigate(`/employees/${employeeCode}`);
             } else {
-              toast.error('No se pudo obtener el ID del empleado');
+              toast.error('No se pudo obtener el código del empleado');
             }
           }}
         >

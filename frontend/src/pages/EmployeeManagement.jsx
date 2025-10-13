@@ -9,6 +9,7 @@ import useCanvasPDFGenerator from '../hooks/useCanvasPDFGenerator';
 import usePDFGenerator from '../hooks/usePDFGenerator';
 import DocumentAssignmentModal from '../components/employees/DocumentAssignmentModal';
 import EmployeeDocumentModal from '../components/employees/EmployeeDocumentModal';
+import EmployeeDocumentUploadDialog from '../components/employees/EmployeeDocumentUploadDialog';
 import { useEmployeeDocuments } from '../hooks/useEmployeeDocuments';
 import { useEmployeeDocumentAssignment } from '../hooks/useEmployeeDocumentAssignment';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
@@ -97,6 +98,40 @@ const EmployeeManagement = () => {
   // Estados para asignación de documentos requeridos
   const [showDocumentsModal, setShowDocumentsModal] = useState(false);
   const [selectedEmployeeForDocuments, setSelectedEmployeeForDocuments] = useState(null);
+
+  // Estados para modal de subida de documentos
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [uploadDocumentData, setUploadDocumentData] = useState({
+    employeeId: null,
+    employeeName: '',
+    requirementId: null,
+    documentType: ''
+  });
+
+  // Deshabilitar el overlay de Radix UI cuando el diálogo de subida esté abierto
+  useEffect(() => {
+    if (showUploadDialog) {
+      // Buscar el overlay de Radix UI y deshabilitarlo
+      const overlays = document.querySelectorAll('[data-slot="dialog-overlay"]');
+      overlays.forEach(overlay => {
+        overlay.style.pointerEvents = 'none';
+      });
+    } else {
+      // Restaurar los overlays
+      const overlays = document.querySelectorAll('[data-slot="dialog-overlay"]');
+      overlays.forEach(overlay => {
+        overlay.style.pointerEvents = '';
+      });
+    }
+
+    return () => {
+      // Limpiar al desmontar
+      const overlays = document.querySelectorAll('[data-slot="dialog-overlay"]');
+      overlays.forEach(overlay => {
+        overlay.style.pointerEvents = '';
+      });
+    };
+  }, [showUploadDialog]);
 
   // Hook con API real para gestión de documentos del empleado seleccionado (modal de asignación)
   const {
@@ -1609,7 +1644,7 @@ const EmployeeManagement = () => {
                               window.open(doc.fileUrl, '_blank');
                             } else if (docStatus === 'pending') {
                               // Si está pendiente y no hay archivo
-                              toast.info('Este documento aún no ha sido subido por el empleado', {
+                              toast('Este documento aún no ha sido subido por el empleado', {
                                 duration: 4000,
                                 icon: '📄'
                               });
@@ -1621,7 +1656,7 @@ const EmployeeManagement = () => {
                               });
                             } else {
                               // Otro estado sin archivo
-                              toast.info('El archivo del documento no está disponible', {
+                              toast('El archivo del documento no está disponible', {
                                 duration: 4000,
                                 icon: 'ℹ️'
                               });
@@ -1641,8 +1676,13 @@ const EmployeeManagement = () => {
                             size="sm"
                             className="h-9 px-4 text-xs font-medium border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/20 transition-all"
                             onClick={() => {
-                              // TODO: Abrir modal para subir documento
-                              toast.info('Función de subida en desarrollo');
+                              setUploadDocumentData({
+                                employeeId: selectedEmployee.id,
+                                employeeName: `${selectedEmployee.first_name} ${selectedEmployee.last_name}`,
+                                requirementId: doc.id,
+                                documentType: docName
+                              });
+                              setShowUploadDialog(true);
                             }}
                             aria-label={`Subir documento ${docName}`}
                             title="Subir archivo del documento"
@@ -1890,8 +1930,21 @@ const EmployeeManagement = () => {
       <Dialog open={showEmployeeProfile} onOpenChange={setShowEmployeeProfile} modal={true}>
         <DialogContent
           className="max-w-[98vw] w-[95vw] sm:w-[85vw] h-[85vh] sm:h-[80vh] p-0 flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl"
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}
+          style={showUploadDialog ? { pointerEvents: 'none' } : {}}
+          onPointerDownOutside={(e) => {
+            // No prevenir si el clic está en el diálogo de subida de documentos
+            if (showUploadDialog) {
+              return;
+            }
+            e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            // No prevenir si el clic está en el diálogo de subida de documentos
+            if (showUploadDialog) {
+              return;
+            }
+            e.preventDefault();
+          }}
         >
           <DialogHeader className="sr-only">
             <DialogTitle>
@@ -2000,8 +2053,8 @@ const EmployeeManagement = () => {
   };
 
   // Debug del usuario
-  console.log('🔍 EmployeeManagement user:', user);
-  console.log('🔍 User role:', user?.role);
+  // console.log('🔍 EmployeeManagement user:', user);
+  // console.log('🔍 User role:', user?.role);
 
   // Solo administradores pueden acceder
   if (user?.role !== 'admin') {
@@ -3794,6 +3847,31 @@ const EmployeeManagement = () => {
           }}
         />
       )}
+
+      {/* Modal de Subida de Documentos */}
+      <EmployeeDocumentUploadDialog
+        isOpen={showUploadDialog}
+        onClose={() => {
+          setShowUploadDialog(false);
+          setUploadDocumentData({
+            employeeId: null,
+            employeeName: '',
+            requirementId: null,
+            documentType: ''
+          });
+        }}
+        onSuccess={(document) => {
+          // Recargar perfil del empleado para ver el documento actualizado
+          if (selectedEmployee) {
+            handleViewEmployeeProfile(selectedEmployee);
+          }
+          toast.success('Documento subido y vinculado exitosamente');
+        }}
+        employeeId={uploadDocumentData.employeeId}
+        employeeName={uploadDocumentData.employeeName}
+        requirementId={uploadDocumentData.requirementId}
+        documentType={uploadDocumentData.documentType}
+      />
     </div>
   );
 };
