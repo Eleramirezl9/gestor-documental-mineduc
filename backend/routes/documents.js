@@ -945,20 +945,29 @@ router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.sin
       compressionRatio,
     } = await processDocument(req.file);
 
-    // Verificar si ya existe un documento con el mismo hash
-    const { data: existingDoc } = await supabaseAdmin
-      .from('documents')
-      .select('id, title')
-      .eq('file_hash', fileHash)
-      .eq('created_by', userId)
-      .single();
+    // Verificar duplicados solo para documentos generales (no de empleados)
+    // Los documentos de empleados están organizados por carpetas y pueden repetirse
+    const parsedTagsForDuplicateCheck = tags ? (typeof tags === 'string' ? JSON.parse(tags) : tags) : [];
+    const isEmployeeDocument = parsedTagsForDuplicateCheck.some(tag => tag.startsWith('empleado:'));
 
-    if (existingDoc) {
-      return res.status(409).json({
-        error: 'Ya existe un documento idéntico',
-        existingDocument: existingDoc,
-      });
+    if (!isEmployeeDocument) {
+      // Solo verificar duplicados para documentos generales (no de empleados)
+      const { data: existingDoc } = await supabaseAdmin
+        .from('documents')
+        .select('id, title')
+        .eq('file_hash', fileHash)
+        .eq('created_by', userId)
+        .single();
+
+      if (existingDoc) {
+        return res.status(409).json({
+          error: 'Ya existe un documento idéntico',
+          existingDocument: existingDoc,
+        });
+      }
     }
+    // Si es documento de empleado, NO verificar duplicados
+    // Cada empleado puede tener el mismo archivo (ej: formato estándar)
 
     // Subir archivo a Supabase Storage
     const { path: filePath, publicUrl } = await uploadFile(
