@@ -1,14 +1,23 @@
 // Cargar variables de entorno primero
 require("dotenv").config();
 
-// Verificar variables críticas
+// Verificar variables críticas (solo Supabase es realmente obligatorio)
 const checkRequiredEnvVars = () => {
-  const required = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'RESEND_API_KEY'];
+  const required = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'];
   const missing = required.filter(key => !process.env[key]);
-  
+
   if (missing.length > 0) {
     console.error('❌ Error crítico: Variables de entorno faltantes:', missing.join(', '));
     process.exit(1);
+  }
+
+  // Advertencias para variables opcionales pero recomendadas
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('⚠️ RESEND_API_KEY no configurada. El sistema usará solo Gmail SMTP para emails.');
+  }
+
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    console.warn('⚠️ Gmail SMTP no configurado. El envío de emails puede fallar.');
   }
 };
 
