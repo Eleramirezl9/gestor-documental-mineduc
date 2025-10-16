@@ -79,6 +79,18 @@ api.interceptors.response.use(
 
 // Funciones de la API
 
+// Notificaciones Automatizadas
+export const automatedNotificationsAPI = {
+  getStatus: () => api.get('/automated-notifications/status'),
+  start: () => api.post('/automated-notifications/start'),
+  stop: () => api.post('/automated-notifications/stop'),
+  generateMessage: (data) => api.post('/automated-notifications/generate-message', data),
+  generateSubject: (data) => api.post('/automated-notifications/generate-subject', data),
+  improveMessage: (data) => api.post('/automated-notifications/improve-message', data),
+  sendTestEmail: (data) => api.post('/automated-notifications/test-email', data),
+  notifyChange: (data) => api.post('/automated-notifications/organizational-change', data),
+}
+
 // Autenticación
 export const authAPI = {
   register: (userData) => api.post('/auth/register', userData),

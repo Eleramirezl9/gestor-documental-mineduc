@@ -60,7 +60,9 @@ router.get('/status', verifyToken, async (req, res) => {
 router.post('/start', verifyToken, async (req, res) => {
   try {
     // Solo admins pueden controlar el servicio
-    if (req.user.role !== 'admin') {
+    const userRole = req.user?.profile?.role || req.user?.role || req.user?.user_metadata?.role;
+
+    if (userRole !== 'admin') {
       return res.status(403).json({ error: 'Acceso denegado' });
     }
 
@@ -91,7 +93,9 @@ router.post('/start', verifyToken, async (req, res) => {
 router.post('/stop', verifyToken, async (req, res) => {
   try {
     // Solo admins pueden controlar el servicio
-    if (req.user.role !== 'admin') {
+    const userRole = req.user?.profile?.role || req.user?.role || req.user?.user_metadata?.role;
+
+    if (userRole !== 'admin') {
       return res.status(403).json({ error: 'Acceso denegado' });
     }
 
@@ -306,7 +310,9 @@ router.post('/organizational-change', verifyToken, [
 ], async (req, res) => {
   try {
     // Solo admins pueden notificar cambios organizacionales
-    if (req.user.role !== 'admin') {
+    const userRole = req.user?.profile?.role || req.user?.role || req.user?.user_metadata?.role;
+
+    if (userRole !== 'admin') {
       return res.status(403).json({ error: 'Acceso denegado' });
     }
 
@@ -359,9 +365,26 @@ router.post('/test-email', verifyToken, [
   body('type').isIn(['document_expiration', 'document_required', 'organizational_change'])
 ], async (req, res) => {
   try {
-    // Solo admins pueden enviar emails de prueba
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Acceso denegado' });
+    // Debug: ver qué rol tiene el usuario
+    console.log('🔍 DEBUG test-email - Usuario:', {
+      id: req.user?.id,
+      email: req.user?.email,
+      role: req.user?.role,
+      profileRole: req.user?.profile?.role,
+      user_metadata: req.user?.user_metadata,
+      profile: req.user?.profile
+    });
+
+    // Verificar rol - soportar múltiples formatos (perfil primero)
+    const userRole = req.user?.profile?.role || req.user?.role || req.user?.user_metadata?.role;
+
+    if (userRole !== 'admin') {
+      console.log('❌ Acceso denegado - rol del usuario:', userRole);
+      return res.status(403).json({
+        error: 'Acceso denegado',
+        details: 'Solo los administradores pueden enviar emails de prueba',
+        userRole: userRole
+      });
     }
 
     const errors = validationResult(req);
@@ -487,7 +510,9 @@ router.post('/settings', verifyToken, [
 ], async (req, res) => {
   try {
     // Solo admins pueden modificar configuración
-    if (req.user.role !== 'admin') {
+    const userRole = req.user?.profile?.role || req.user?.role || req.user?.user_metadata?.role;
+
+    if (userRole !== 'admin') {
       return res.status(403).json({ error: 'Acceso denegado' });
     }
 

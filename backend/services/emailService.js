@@ -1,50 +1,232 @@
-const nodemailer = require('nodemailer');
+﻿const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const { supabase } = require('../config/supabase');
 
-/**
- * Servicio de email para envío de notificaciones automatizadas
- */
 class EmailService {
   constructor() {
-    this.transporter = null;
-    this.setupTransporter();
+    this.initializeServices();
   }
 
-  setupTransporter() {
-    // Configuración para Gmail
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD // App Password, no la contraseña normal
-      }
-    });
+  initializeServices() {
+    // Configurar Resend
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) {
+      console.error(' Error: RESEND_API_KEY no está configurada');
+      throw new Error('RESEND_API_KEY is required');
+    }
+    
+    this.resend = new Resend(resendKey);
+    console.log(' Resend inicializado correctamente');
+
+    // Configurar Gmail
+    const gmailConfig = {
+      host: process.env.EMAIL_HOST,
+      port: process.env.EMAIL_PORT,
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD
+    };
+
+    // Verificar Gmail
+    const missingVars = Object.entries(gmailConfig)
+      .filter(([_, value]) => !value)
+      .map(([key]) => key);
+
+    if (missingVars.length > 0) {
+      console.warn(' Configuración de Gmail incompleta:', missingVars.join(', '));
+      this.fallbackEnabled = false;
+    } else {
+      this.gmailTransporter = nodemailer.createTransport({
+        host: gmailConfig.host,
+        port: gmailConfig.port,
+        secure: false,
+        auth: {
+          user: gmailConfig.user,
+          pass: gmailConfig.pass
+        }
+      });
+      this.fallbackEnabled = true;
+      console.log(' Gmail configurado como fallback');
+    }
   }
 
-  /**
-   * Envía un email
-   */
-  async sendEmail({ to, subject, htmlContent, textContent }) {
+  verifyConfiguration() {
     try {
-      if (!this.transporter) {
-        throw new Error('Transporter de email no configurado');
-      }
-
-      const mailOptions = {
-        from: `"MINEDUC - Sistema Documental" <${process.env.GMAIL_USER}>`,
-        to: Array.isArray(to) ? to.join(', ') : to,
-        subject,
-        text: textContent,
-        html: htmlContent
+      // Verificar Resend
+      const resendConfig = {
+        apiKey: Boolean(process.env.RESEND_API_KEY),
+        fromEmail: Boolean(process.env.RESEND_FROM_EMAIL)
       };
 
-      const result = await this.transporter.sendMail(mailOptions);
-      console.log(`📧 Email enviado exitosamente a ${to}: ${result.messageId}`);
-      return { success: true, messageId: result.messageId };
+      // Verificar Gmail
+      const gmailConfig = {
+        host: Boolean(process.env.EMAIL_HOST),
+        port: Boolean(process.env.EMAIL_PORT),
+        user: Boolean(process.env.GMAIL_USER),
+        pass: Boolean(process.env.GMAIL_APP_PASSWORD)
+      };
 
+      return {
+        resend: {
+          available: resendConfig.apiKey && resendConfig.fromEmail,
+          config: resendConfig
+        },
+        gmail: {
+          available: Object.values(gmailConfig).every(val => val),
+          config: gmailConfig,
+          enabled: this.fallbackEnabled
+        },
+        status: 'ok'
+      };
     } catch (error) {
-      console.error('Error enviando email:', error);
-      throw error;
+      console.error('Error verificando configuración:', error);
+      return {
+        status: 'error',
+        error: error.message
+      };
+    }
+  }
+
+  async sendEmail({ to, subject, htmlContent, textContent, category = 'general' }) {
+    // Detectar si el destinatario es diferente al email registrado en Resend
+    const resendRegisteredEmail = 'eramirezl9@miumg.edu.gt'; // Tu email de Resend
+    const recipientEmail = Array.isArray(to) ? to[0] : to;
+    const isDifferentRecipient = recipientEmail !== resendRegisteredEmail;
+
+    // Si es un destinatario diferente y Gmail está disponible, usar Gmail directamente
+    if (isDifferentRecipient && this.fallbackEnabled) {
+      console.log('📧 Destinatario diferente detectado. Usando Gmail directamente para:', recipientEmail);
+
+      try {
+        const gmailResult = await this.gmailTransporter.sendMail({
+          from: process.env.EMAIL_FROM || `"MINEDUC Sistema" <${process.env.GMAIL_USER}>`,
+          to,
+          subject,
+          html: htmlContent,
+          text: textContent
+        });
+
+        await this.logEmailSent({
+          to,
+          subject,
+          provider: 'gmail',
+          status: 'sent',
+          messageId: gmailResult.messageId,
+          category
+        });
+
+        console.log('✅ Email enviado con Gmail:', gmailResult.messageId);
+        return { success: true, provider: 'gmail', id: gmailResult.messageId };
+      } catch (gmailError) {
+        console.error('❌ Error enviando con Gmail:', gmailError.message);
+        throw new Error(`Error enviando email: ${gmailError.message}`);
+      }
+    }
+
+    // Si es el mismo destinatario de Resend o no hay Gmail, usar Resend
+    try {
+      const fromEmail = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM || 'onboarding@resend.dev';
+
+      console.log('📧 Intentando enviar email con Resend desde:', fromEmail);
+
+      const result = await this.resend.emails.send({
+        from: fromEmail,
+        to,
+        subject,
+        html: htmlContent,
+        text: textContent,
+        tags: [{ name: 'category', value: category }]
+      });
+
+      await this.logEmailSent({
+        to,
+        subject,
+        provider: 'resend',
+        status: 'sent',
+        messageId: result.id,
+        category
+      });
+
+      return { success: true, provider: 'resend', id: result.id };
+    } catch (error) {
+      console.error('❌ Error enviando email con Resend:', error.message);
+      console.log('🔍 Detalles del error:', error.response?.body || error);
+
+      // Intentar con Gmail si está disponible
+      if (this.fallbackEnabled) {
+        console.log('🔄 Intentando con Gmail como fallback...');
+        console.log('📧 Gmail configurado:', {
+          host: process.env.EMAIL_HOST,
+          port: process.env.EMAIL_PORT,
+          user: process.env.GMAIL_USER ? '✓ Configurado' : '✗ Falta',
+          pass: process.env.GMAIL_APP_PASSWORD ? '✓ Configurado' : '✗ Falta'
+        });
+
+        try {
+          const fallbackResult = await this.gmailTransporter.sendMail({
+            from: process.env.EMAIL_FROM || `"MINEDUC Sistema" <${process.env.GMAIL_USER}>`,
+            to,
+            subject,
+            html: htmlContent,
+            text: textContent
+          });
+
+          await this.logEmailSent({
+            to,
+            subject,
+            provider: 'gmail',
+            status: 'sent',
+            messageId: fallbackResult.messageId,
+            category
+          });
+
+          console.log('✅ Email enviado con Gmail (fallback):', fallbackResult.messageId);
+          return { success: true, provider: 'gmail', id: fallbackResult.messageId, fallback: true };
+        } catch (fallbackError) {
+          console.error('❌ Error enviando email con Gmail:', fallbackError.message);
+          console.log('🔍 Detalles del error de Gmail:', fallbackError);
+
+          await this.logEmailSent({
+            to,
+            subject,
+            provider: 'gmail',
+            status: 'failed',
+            error: fallbackError.message,
+            category
+          });
+
+          throw new Error(`Ambos proveedores fallaron. Resend: ${error.message} | Gmail: ${fallbackError.message}`);
+        }
+      } else {
+        console.log('⚠️ Fallback a Gmail no está habilitado. Verifica la configuración de Gmail en .env');
+      }
+
+      await this.logEmailSent({
+        to,
+        subject,
+        provider: 'resend',
+        status: 'failed',
+        error: error.message,
+        category
+      });
+
+      throw new Error('Error enviando email');
+    }
+  }
+
+  async logEmailSent({ to, subject, provider, status, messageId, error, category }) {
+    try {
+      await supabase.from('email_logs').insert({
+        recipient: to,
+        subject,
+        provider,
+        status,
+        message_id: messageId,
+        error_message: error,
+        category,
+        sent_at: new Date().toISOString()
+      });
+    } catch (logError) {
+      console.error('Error registrando email:', logError);
     }
   }
 
@@ -63,7 +245,7 @@ class EmailService {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title}</title>
     <style>
-        body { 
+        body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             line-height: 1.6;
             color: #333;
@@ -197,14 +379,14 @@ class EmailService {
   }
 
   /**
-   * Notifica vencimiento de documento
+   * Envía notificación de vencimiento de documento
    */
   async sendDocumentExpirationNotification({ userEmail, userName, document, daysUntilExpiration }) {
     const urgencyLevel = daysUntilExpiration <= 1 ? 'urgent' : daysUntilExpiration <= 7 ? 'warning' : '';
     const urgencyText = daysUntilExpiration <= 1 ? 'URGENTE' : daysUntilExpiration <= 7 ? 'IMPORTANTE' : '';
-    
+
     const subject = `${urgencyText ? `[${urgencyText}] ` : ''}Documento próximo a vencer - ${document.title}`;
-    
+
     let message;
     if (daysUntilExpiration === 0) {
       message = `Su documento <strong>"${document.title}"</strong> vence HOY. Es necesario que tome acción inmediata para renovarlo o actualizarlo.`;
@@ -251,16 +433,17 @@ Sistema de Gestión Documental - MINEDUC
       to: userEmail,
       subject,
       htmlContent,
-      textContent
+      textContent,
+      category: 'document_expiration'
     });
   }
 
   /**
-   * Notifica nuevo documento requerido
+   * Envía notificación de documento requerido
    */
   async sendDocumentRequiredNotification({ userEmail, userName, requirement }) {
     const subject = `Nuevo documento requerido - ${requirement.document_type}`;
-    
+
     const message = `Se le ha asignado un nuevo documento que debe presentar: <strong>"${requirement.document_type}"</strong>`;
 
     const htmlContent = this.generateEmailTemplate({
@@ -298,16 +481,17 @@ Sistema de Gestión Documental - MINEDUC
       to: userEmail,
       subject,
       htmlContent,
-      textContent
+      textContent,
+      category: 'document_required'
     });
   }
 
   /**
-   * Notifica cambios organizacionales
+   * Envía notificación de cambio organizacional
    */
   async sendOrganizationalChangeNotification({ userEmails, change }) {
     const subject = `Cambio Organizacional - ${change.title}`;
-    
+
     const message = `Se ha realizado un cambio importante en la organización que puede afectar sus responsabilidades documentales.`;
 
     const htmlContent = this.generateEmailTemplate({
@@ -339,293 +523,17 @@ Sistema de Gestión Documental - MINEDUC
 `;
 
     // Enviar a múltiples usuarios
-    const promises = userEmails.map(email => 
+    const promises = userEmails.map(email =>
       this.sendEmail({
         to: email,
         subject,
         htmlContent,
-        textContent
+        textContent,
+        category: 'organizational_change'
       })
     );
 
     return await Promise.all(promises);
-  }
-
-  /**
-   * Envía resumen diario de notificaciones
-   */
-  async sendDailySummary({ userEmail, userName, summary }) {
-    const subject = `Resumen Diario - ${new Date().toLocaleDateString('es-ES')}`;
-    
-    let message = `Aquí está su resumen diario de actividades documentales:`;
-    
-    if (summary.expiring_soon > 0) {
-      message += `<br>• <strong>${summary.expiring_soon}</strong> documento${summary.expiring_soon > 1 ? 's' : ''} próximo${summary.expiring_soon > 1 ? 's' : ''} a vencer`;
-    }
-    
-    if (summary.new_requirements > 0) {
-      message += `<br>• <strong>${summary.new_requirements}</strong> nuevo${summary.new_requirements > 1 ? 's' : ''} requerimiento${summary.new_requirements > 1 ? 's' : ''}`;
-    }
-    
-    if (summary.pending_approvals > 0) {
-      message += `<br>• <strong>${summary.pending_approvals}</strong> documento${summary.pending_approvals > 1 ? 's' : ''} pendiente${summary.pending_approvals > 1 ? 's' : ''} de aprobación`;
-    }
-
-    if (summary.expiring_soon === 0 && summary.new_requirements === 0 && summary.pending_approvals === 0) {
-      message = `¡Excelente! No tiene tareas pendientes urgentes el día de hoy.`;
-    }
-
-    const htmlContent = this.generateEmailTemplate({
-      title: subject,
-      message,
-      actionUrl: '/dashboard',
-      actionText: 'Ver Dashboard',
-      userName
-    });
-
-    const textContent = `
-Hola ${userName},
-
-${message.replace(/<[^>]*>/g, '').replace(/•/g, '-')}
-
-Para más información, visite: ${process.env.FRONTEND_URL}/dashboard
-
-Saludos,
-Sistema de Gestión Documental - MINEDUC
-`;
-
-    return await this.sendEmail({
-      to: userEmail,
-      subject,
-      htmlContent,
-      textContent
-    });
-  }
-
-  /**
-   * Envía email de bienvenida a nuevo usuario
-   */
-  async sendWelcomeEmail({ userEmail, userName, userRole, userDepartment, loginLink }) {
-    const subject = `🎉 Bienvenido al Sistema Documental MINEDUC - ${userName}`;
-
-    const roleDisplay = {
-      'admin': '👑 Administrador',
-      'editor': '✏️ Editor',
-      'viewer': '👀 Visor',
-      'employee': '👤 Empleado'
-    }[userRole] || '❓ Sin definir';
-
-    const message = `
-      ¡Te damos la bienvenida al <strong>Sistema de Gestión Documental del Ministerio de Educación</strong>!
-      Tu cuenta ha sido creada exitosamente y ya puedes acceder al sistema.
-      <br><br>
-      <strong>📋 Detalles de tu cuenta:</strong><br>
-      • Email: ${userEmail}<br>
-      • Rol: ${roleDisplay}<br>
-      • Departamento: ${userDepartment || 'No asignado'}<br>
-      <br>
-      <strong>🚀 ¿Qué puedes hacer ahora?</strong><br>
-      • Acceder al sistema con tu email y la contraseña proporcionada<br>
-      • Completar tu perfil con información adicional<br>
-      • Comenzar a gestionar documentos según tu rol<br>
-      • Recibir notificaciones automáticas sobre documentos pendientes<br>
-      <br>
-      <strong>⚡ Recordatorio importante:</strong><br>
-      Este es un sistema oficial del Ministerio de Educación. Mantén tus credenciales seguras
-      y no compartas tu acceso con otras personas.
-    `;
-
-    const htmlContent = this.generateEmailTemplate({
-      title: 'Bienvenido al Sistema MINEDUC',
-      message,
-      actionUrl: loginLink || '/login',
-      actionText: '🔐 Acceder al Sistema',
-      userName,
-      documentDetails: {
-        title: 'Tu Nueva Cuenta',
-        type: 'Información de Acceso',
-        status: 'Activa',
-        description: `Rol: ${roleDisplay} | Departamento: ${userDepartment || 'No asignado'}`
-      }
-    });
-
-    const textContent = `
-Hola ${userName},
-
-¡Bienvenido al Sistema de Gestión Documental del MINEDUC!
-
-Tu cuenta ha sido creada exitosamente.
-
-Detalles de tu cuenta:
-- Email: ${userEmail}
-- Rol: ${roleDisplay}
-- Departamento: ${userDepartment || 'No asignado'}
-
-Accede al sistema en: ${process.env.FRONTEND_URL || 'http://localhost:5173'}${loginLink || '/login'}
-
-Saludos,
-Sistema de Gestión Documental - MINEDUC
-`;
-
-    return await this.sendEmail({
-      to: userEmail,
-      subject,
-      htmlContent,
-      textContent
-    });
-  }
-
-  /**
-   * Envía recordatorio general a usuario
-   */
-  async sendGeneralReminder({ userEmail, userName, reminderType, customMessage }) {
-    const subject = `📄 Recordatorio: ${reminderType} - Sistema MINEDUC`;
-
-    const message = customMessage || `
-      Este es un recordatorio del Sistema de Gestión Documental del MINEDUC.
-      <br><br>
-      Te recordamos revisar tus documentos pendientes y mantener tu información actualizada.
-      <br><br>
-      Si tienes alguna duda o necesitas asistencia, no dudes en contactar al administrador del sistema.
-    `;
-
-    const htmlContent = this.generateEmailTemplate({
-      title: `Recordatorio: ${reminderType}`,
-      message,
-      actionUrl: '/documents',
-      actionText: '📄 Ver Mis Documentos',
-      userName
-    });
-
-    const textContent = `
-Hola ${userName},
-
-${message.replace(/<[^>]*>/g, '')}
-
-Accede al sistema en: ${process.env.FRONTEND_URL || 'http://localhost:5173'}/documents
-
-Saludos,
-Sistema de Gestión Documental - MINEDUC
-`;
-
-    return await this.sendEmail({
-      to: userEmail,
-      subject,
-      htmlContent,
-      textContent
-    });
-  }
-
-  /**
-   * Envía notificación de documento subido exitosamente
-   */
-  async sendDocumentUploadConfirmation({ userEmail, userName, document }) {
-    const subject = `📤 Documento Recibido: ${document.title || 'Sin título'}`;
-
-    const message = `
-      Hemos recibido tu documento <strong>"${document.title || 'Sin título'}"</strong> exitosamente.
-      <br><br>
-      Tu documento será revisado por nuestro equipo y recibirás una notificación con
-      el resultado en los próximos días hábiles.
-      <br><br>
-      <strong>Gracias por utilizar el Sistema de Gestión Documental del MINEDUC.</strong>
-    `;
-
-    const htmlContent = this.generateEmailTemplate({
-      title: 'Documento Recibido Exitosamente',
-      message,
-      actionUrl: '/documents',
-      actionText: '📄 Ver Mis Documentos',
-      userName,
-      documentDetails: {
-        title: document.title || 'Sin título',
-        type: document.type || 'Documento',
-        status: 'Pendiente de revisión',
-        description: `Subido el ${new Date().toLocaleDateString('es-ES')} | Tamaño: ${document.file_size || 'No especificado'}`
-      }
-    });
-
-    const textContent = `
-Hola ${userName},
-
-Hemos recibido tu documento "${document.title || 'Sin título'}" exitosamente.
-
-Detalles del documento:
-- Nombre: ${document.title || 'Sin título'}
-- Fecha de subida: ${new Date().toLocaleDateString('es-ES')}
-- Estado: Pendiente de revisión
-
-Tu documento será revisado por nuestro equipo.
-
-Saludos,
-Sistema de Gestión Documental - MINEDUC
-`;
-
-    return await this.sendEmail({
-      to: userEmail,
-      subject,
-      htmlContent,
-      textContent
-    });
-  }
-
-  /**
-   * Genera link único y seguro para subida de documentos
-   */
-  generateSecureUploadLink(userId, documentTypeId) {
-    const timestamp = Date.now();
-    const randomString = Math.random().toString(36).substring(2, 15);
-    const token = Buffer.from(`${userId}:${documentTypeId}:${timestamp}:${randomString}`).toString('base64');
-
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    return `${baseUrl}/upload/${token}`;
-  }
-
-  /**
-   * Valida link de subida seguro
-   */
-  validateSecureUploadLink(token) {
-    try {
-      const decoded = Buffer.from(token, 'base64').toString('ascii');
-      const [userId, documentTypeId, timestamp, randomString] = decoded.split(':');
-
-      // Link válido por 7 días
-      const linkAge = Date.now() - parseInt(timestamp);
-      const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 días en milliseconds
-
-      if (linkAge > maxAge) {
-        return { valid: false, reason: 'Link expirado' };
-      }
-
-      return {
-        valid: true,
-        userId,
-        documentTypeId,
-        timestamp: parseInt(timestamp)
-      };
-
-    } catch (error) {
-      return { valid: false, reason: 'Link inválido' };
-    }
-  }
-
-  /**
-   * Verifica configuración del servicio
-   */
-  async verifyConfiguration() {
-    try {
-      if (!this.transporter) {
-        console.log('⚠️ Email service not configured, running in development mode');
-        return { configured: false, development: true };
-      }
-
-      await this.transporter.verify();
-      console.log('✅ Configuración de email verificada correctamente');
-      return { configured: true, development: false };
-    } catch (error) {
-      console.error('❌ Error en configuración de email:', error);
-      return { configured: false, development: false, error: error.message };
-    }
   }
 }
 

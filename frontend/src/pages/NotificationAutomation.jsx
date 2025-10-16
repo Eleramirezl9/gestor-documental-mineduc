@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import api from '../lib/api'
+import { automatedNotificationsAPI } from '../lib/api'
 import { 
   Bot,
   Mail,
@@ -104,7 +104,7 @@ const NotificationAutomation = () => {
 
   const loadServiceStatus = async () => {
     try {
-      const response = await api.get('/automated-notifications/status')
+      const response = await automatedNotificationsAPI.getStatus()
       setServiceStatus(response.data)
     } catch (error) {
       console.error('Error cargando estado del servicio:', error)
@@ -262,23 +262,12 @@ const NotificationAutomation = () => {
 
     try {
       setIsTestingEmail(true)
-      const response = await fetch('/api/automated-notifications/test-email', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: testEmail,
-          type: emailType
-        })
+      await automatedNotificationsAPI.sendTestEmail({
+        email: testEmail,
+        type: emailType
       })
       
-      if (response.ok) {
-        toast.success(`Email de prueba enviado a ${testEmail}`)
-      } else {
-        throw new Error('Error enviando email')
-      }
+      toast.success(`Email de prueba enviado a ${testEmail}`)
     } catch (error) {
       console.error('Error enviando email de prueba:', error)
       toast.error('Error al enviar email de prueba')
@@ -289,20 +278,8 @@ const NotificationAutomation = () => {
 
   const notifyOrganizationalChange = async (changeData) => {
     try {
-      const response = await fetch('/api/automated-notifications/organizational-change', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(changeData)
-      })
-      
-      if (response.ok) {
-        toast.success('Notificación de cambio organizacional enviada')
-      } else {
-        throw new Error('Error enviando notificación')
-      }
+      await automatedNotificationsAPI.notifyChange(changeData)
+      toast.success('Notificación de cambio organizacional enviada')
     } catch (error) {
       console.error('Error enviando notificación organizacional:', error)
       toast.error('Error al enviar notificación')

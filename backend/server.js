@@ -1,3 +1,19 @@
+// Cargar variables de entorno primero
+require("dotenv").config();
+
+// Verificar variables críticas
+const checkRequiredEnvVars = () => {
+  const required = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'RESEND_API_KEY'];
+  const missing = required.filter(key => !process.env[key]);
+  
+  if (missing.length > 0) {
+    console.error('❌ Error crítico: Variables de entorno faltantes:', missing.join(', '));
+    process.exit(1);
+  }
+};
+
+checkRequiredEnvVars();
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -5,7 +21,7 @@ const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
 const swaggerJSDoc = require("swagger-jsdoc");
 const swaggerUi = require("swagger-ui-express");
-require("dotenv").config();
+const automatedNotificationsRouter = require("./routes/automatedNotifications");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
