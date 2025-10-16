@@ -19,7 +19,7 @@ const BUCKET_NAME = 'documents';
  * @param {string} folder - Carpeta donde guardar (general, contratos, certificados, etc.)
  * @returns {Promise<{path: string, publicUrl: string}>}
  */
-async function uploadFile(fileBuffer, fileName, mimeType, userId, folder = 'general') {
+async function uploadFile(fileBuffer, fileName, mimeType, userId, folder = 'general', employeeId = null, employeeCode = null) {
   try {
     // Validar y sanitizar folder name
     const validFolders = ['general', 'contratos', 'certificados', 'actas', 'resoluciones', 'informes', 'correspondencia', 'empleados'];
@@ -29,10 +29,17 @@ async function uploadFile(fileBuffer, fileName, mimeType, userId, folder = 'gene
     const fileExtension = getFileExtension(fileName, mimeType);
     const uniqueFileName = `${uuidv4()}.${fileExtension}`;
 
-    // Construir la ruta del archivo: folder/userId/uniqueFileName
-    // Estructura: documents/general/user-uuid/file-uuid.ext
-    // Esto garantiza organización y seguridad
-    const filePath = `${sanitizedFolder}/${userId}/${uniqueFileName}`;
+    // Construir la ruta del archivo
+    // Si es documento de empleado, usar formato: empleados/MIN25001_uuid/archivo.pdf
+    // Si es general, usar formato: general/user-uuid/archivo.pdf
+    let folderIdentifier;
+    if (sanitizedFolder === 'empleados' && employeeId) {
+      // Usar formato: MIN25001_uuid para identificación visual en Supabase Storage
+      folderIdentifier = employeeCode ? `${employeeCode}_${employeeId}` : employeeId;
+    } else {
+      folderIdentifier = userId;
+    }
+    const filePath = `${sanitizedFolder}/${folderIdentifier}/${uniqueFileName}`;
 
     console.log(`📁 Uploading to path: ${filePath}`);
 

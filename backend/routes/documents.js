@@ -969,13 +969,30 @@ router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.sin
     // Si es documento de empleado, NO verificar duplicados
     // Cada empleado puede tener el mismo archivo (ej: formato estándar)
 
+    // Extraer employeeId y código del empleado de los tags
+    let employeeId = null;
+    let employeeCode = null;
+    if (isEmployeeDocument) {
+      const employeeTag = parsedTagsForDuplicateCheck.find(tag => tag.startsWith('empleado:'));
+      const codigoTag = parsedTagsForDuplicateCheck.find(tag => tag.startsWith('codigo:'));
+
+      if (employeeTag) {
+        employeeId = employeeTag.split(':')[1]; // empleado:UUID -> UUID
+      }
+      if (codigoTag) {
+        employeeCode = codigoTag.split(':')[1]; // codigo:MIN25001 -> MIN25001
+      }
+    }
+
     // Subir archivo a Supabase Storage
     const { path: filePath, publicUrl } = await uploadFile(
       processedBuffer,
       req.file.originalname,
       req.file.mimetype,
       userId,
-      folder
+      folder,
+      employeeId,      // Pasar employeeId para documentos de empleados
+      employeeCode     // Pasar employeeCode para identificación visual
     );
 
     // Determinar categoría (usar AI o la proporcionada)

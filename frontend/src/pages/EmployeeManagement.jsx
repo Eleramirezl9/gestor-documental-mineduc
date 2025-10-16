@@ -104,6 +104,7 @@ const EmployeeManagement = () => {
   const [uploadDocumentData, setUploadDocumentData] = useState({
     employeeId: null,
     employeeName: '',
+    employeeCode: '',
     requirementId: null,
     documentType: ''
   });
@@ -1679,6 +1680,7 @@ const EmployeeManagement = () => {
                               setUploadDocumentData({
                                 employeeId: selectedEmployee.id,
                                 employeeName: `${selectedEmployee.first_name} ${selectedEmployee.last_name}`,
+                                employeeCode: selectedEmployee.employee_id, // MIN25001, MIN25002, etc.
                                 requirementId: doc.id,
                                 documentType: docName
                               });
@@ -3856,6 +3858,7 @@ const EmployeeManagement = () => {
           setUploadDocumentData({
             employeeId: null,
             employeeName: '',
+            employeeCode: '',
             requirementId: null,
             documentType: ''
           });
@@ -3869,6 +3872,7 @@ const EmployeeManagement = () => {
         }}
         employeeId={uploadDocumentData.employeeId}
         employeeName={uploadDocumentData.employeeName}
+        employeeCode={uploadDocumentData.employeeCode}
         requirementId={uploadDocumentData.requirementId}
         documentType={uploadDocumentData.documentType}
       />

@@ -14,6 +14,7 @@ const EmployeeDocumentUploadDialog = ({
   onSuccess,
   employeeId,
   employeeName,
+  employeeCode, // Agregar employeeCode (MIN25001, MIN25002, etc.)
   requirementId,
   documentType
 }) => {
@@ -108,7 +109,8 @@ const EmployeeDocumentUploadDialog = ({
 
       // Añadir metadata específica del empleado
       const tags = JSON.stringify([
-        employeeId,
+        `empleado:${employeeId}`,  // Formato: empleado:UUID para identificar la carpeta
+        `codigo:${employeeCode}`,  // Agregar código del empleado (MIN25001) para identificación visual
         documentType,
         'empleado',
         'requerimiento'
