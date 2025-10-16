@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { automatedNotificationsAPI } from '../lib/api'
-import { 
+import {
   Bot,
   Mail,
   Calendar,
@@ -34,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from '../components/ui/switch'
 import { Slider } from '../components/ui/slider'
 import { Alert, AlertDescription } from '../components/ui/alert'
-import { 
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -45,6 +45,8 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { notificationsAPI } from '../lib/api'
 import toast from 'react-hot-toast'
+import RenewalEmailsManager from '../components/automation/RenewalEmailsManager'
+import EmailLogsMonitor from '../components/automation/EmailLogsMonitor'
 
 const NotificationAutomation = () => {
   const { user } = useAuth()
@@ -397,15 +399,19 @@ const NotificationAutomation = () => {
         </Card>
       </div>
 
-      <Tabs defaultValue="composer" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+      <Tabs defaultValue="renewals" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="renewals" className="flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            Renovaciones
+          </TabsTrigger>
           <TabsTrigger value="composer" className="flex items-center gap-2">
             <Wand2 className="h-4 w-4" />
             Compositor IA
           </TabsTrigger>
           <TabsTrigger value="automation" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
-            Automatización
+            Configuración
           </TabsTrigger>
           <TabsTrigger value="testing" className="flex items-center gap-2">
             <Send className="h-4 w-4" />
@@ -416,6 +422,11 @@ const NotificationAutomation = () => {
             Monitoreo
           </TabsTrigger>
         </TabsList>
+
+        {/* Tab: Renovaciones - NUEVA VISTA PRINCIPAL */}
+        <TabsContent value="renewals" className="space-y-6">
+          <RenewalEmailsManager />
+        </TabsContent>
 
         {/* Tab: Compositor IA */}
         <TabsContent value="composer" className="space-y-6">
@@ -1069,21 +1080,21 @@ const NotificationAutomation = () => {
                         {serviceStatus.automatedService.isRunning ? 'Activo' : 'Detenido'}
                       </Badge>
                     </div>
-                    
+
                     <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
                       <span>Procesos Activos</span>
                       <Badge variant="secondary">
                         {serviceStatus.automatedService.activeIntervals}
                       </Badge>
                     </div>
-                    
+
                     <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
                       <span>IA Disponible</span>
                       <Badge variant={serviceStatus.aiService.available ? "default" : "destructive"}>
                         {serviceStatus.aiService.available ? `Sí (${serviceStatus.aiService.provider})` : 'No'}
                       </Badge>
                     </div>
-                    
+
                     <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
                       <span>Email Configurado</span>
                       <Badge variant={serviceStatus.emailService.available ? "default" : "destructive"}>
@@ -1132,6 +1143,9 @@ const NotificationAutomation = () => {
               </CardContent>
             </Card>
           </div>
+
+          {/* Monitor de emails */}
+          <EmailLogsMonitor />
         </TabsContent>
       </Tabs>
     </div>

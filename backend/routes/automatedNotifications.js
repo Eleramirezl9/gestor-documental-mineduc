@@ -5,6 +5,7 @@ const { verifyToken } = require('../middleware/auth');
 const automatedNotificationService = require('../services/automatedNotificationService');
 const aiMessageService = require('../services/aiMessageService');
 const emailService = require('../services/emailService');
+const gpt5NanoService = require('../services/gpt5NanoService');
 
 const router = express.Router();
 
@@ -544,6 +545,646 @@ router.post('/settings', verifyToken, [
     });
   } catch (error) {
     console.error('Error actualizando configuración:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/automated-notifications/renewals/pending:
+ *   get:
+ *     summary: Obtener documentos pendientes de renovación con datos para automatización
+ *     tags: [AutomatedNotifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: days
+ *         schema:
+ *           type: number
+ *         description: Días de anticipación (default 30)
+ *       - in: query
+ *         name: urgency
+ *         schema:
+ *           type: string
+ *           enum: [urgent, high, medium, all]
+ *         description: Filtrar por nivel de urgencia
+ *     responses:
+ *       200:
+ *         description: Documentos pendientes obtenidos exitosamente
+ */
+router.get('/renewals/pending', verifyToken, [
+  query('days').optional().isInt({ min: 1, max: 365 }).toInt(),
+  query('urgency').optional().isIn(['urgent', 'high', 'medium', 'expired', 'all'])
+], async (req, res) => {
+  // Validar errores de entrada
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    console.error('Errores de validación en /renewals/pending:', errors.array());
+    return res.status(400).json({ errors: errors.array() });
+  }
+  try {
+    const userRole = req.user?.profile?.role || req.user?.role || req.user?.user_metadata?.role;
+    if (userRole !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+
+    const days = parseInt(req.query.days) || 30;
+    const urgency = req.query.urgency || 'all';
+
+    // Calcular fecha límite
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + days);
+    const targetDateString = targetDate.toISOString().split('T')[0];
+
+    // Obtener documentos próximos a vencer
+    let query = supabase
+      .from('employee_document_requirements')
+      .select(`
+        *,
+        employees!employee_document_requirements_employee_id_fkey(
+          id,
+          employee_id,
+          first_name,
+          last_name,
+          email,
+          position,
+          department
+        )
+      `)
+      .eq('status', 'active')
+      .not('expiration_date', 'is', null)
+      .lte('expiration_date', targetDateString)
+      .order('expiration_date', { ascending: true });
+
+    const { data: documents, error } = await query;
+
+    if (error) {
+      console.error('Error obteniendo documentos:', error);
+      return res.status(400).json({ error: error.message });
+    }
+
+    // Calcular días hasta vencimiento y clasificar por urgencia
+    const enrichedDocuments = documents.map(doc => {
+      const expirationDate = new Date(doc.expiration_date);
+      const today = new Date();
+      const daysUntilExpiration = Math.ceil((expirationDate - today) / (1000 * 60 * 60 * 24));
+
+      let urgencyLevel = 'medium';
+      if (daysUntilExpiration <= 0) {
+        urgencyLevel = 'expired';
+      } else if (daysUntilExpiration <= 7) {
+        urgencyLevel = 'urgent';
+      } else if (daysUntilExpiration <= 15) {
+        urgencyLevel = 'high';
+      }
+
+      return {
+        ...doc,
+        days_until_expiration: daysUntilExpiration,
+        urgency_level: urgencyLevel,
+        employee_name: doc.employees ? `${doc.employees.first_name} ${doc.employees.last_name}` : 'Sin nombre',
+        employee_code: doc.employees?.employee_id || null,
+        employee_email: doc.employees?.email || null,
+        document_type_name: doc.document_type || 'Sin tipo'
+      };
+    });
+
+    // Filtrar por urgencia si se especifica
+    let filteredDocuments = enrichedDocuments;
+    if (urgency !== 'all') {
+      filteredDocuments = enrichedDocuments.filter(doc => doc.urgency_level === urgency);
+    }
+
+    // Agrupar por urgencia
+    const groupedByUrgency = {
+      expired: filteredDocuments.filter(d => d.urgency_level === 'expired'),
+      urgent: filteredDocuments.filter(d => d.urgency_level === 'urgent'),
+      high: filteredDocuments.filter(d => d.urgency_level === 'high'),
+      medium: filteredDocuments.filter(d => d.urgency_level === 'medium')
+    };
+
+    res.json({
+      success: true,
+      data: filteredDocuments,
+      grouped: groupedByUrgency,
+      summary: {
+        total: filteredDocuments.length,
+        expired: groupedByUrgency.expired.length,
+        urgent: groupedByUrgency.urgent.length,
+        high: groupedByUrgency.high.length,
+        medium: groupedByUrgency.medium.length
+      }
+    });
+  } catch (error) {
+    console.error('Error obteniendo documentos pendientes:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/automated-notifications/generate-email-content:
+ *   post:
+ *     summary: Generar contenido de email con GPT-5 Nano para documento específico
+ *     tags: [AutomatedNotifications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               documentId:
+ *                 type: string
+ *               preview:
+ *                 type: boolean
+ *                 description: Si es true, solo genera preview sin enviar
+ *     responses:
+ *       200:
+ *         description: Contenido generado exitosamente
+ */
+router.post('/generate-email-content', verifyToken, [
+  body('documentId').isString().trim(),
+  body('preview').optional().isBoolean()
+], async (req, res) => {
+  try {
+    const userRole = req.user?.profile?.role || req.user?.role || req.user?.user_metadata?.role;
+    if (userRole !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { documentId, preview = true } = req.body;
+
+    // Obtener documento completo
+    const { data: document, error: docError } = await supabase
+      .from('employee_document_requirements')
+      .select(`
+        *,
+        employees!employee_document_requirements_employee_id_fkey(
+          id,
+          employee_id,
+          first_name,
+          last_name,
+          email,
+          position,
+          department
+        )
+      `)
+      .eq('id', documentId)
+      .single();
+
+    if (docError || !document) {
+      return res.status(404).json({ error: 'Documento no encontrado' });
+    }
+
+    if (!document.employees?.email) {
+      return res.status(400).json({ error: 'El empleado no tiene email configurado' });
+    }
+
+    // Calcular días hasta vencimiento
+    const expirationDate = new Date(document.expiration_date);
+    const today = new Date();
+    const daysUntilExpiration = Math.ceil((expirationDate - today) / (1000 * 60 * 60 * 24));
+
+    let urgencyLevel = 'medium';
+    if (daysUntilExpiration <= 3) urgencyLevel = 'urgent';
+    else if (daysUntilExpiration <= 7) urgencyLevel = 'high';
+
+    // Generar contenido con GPT-5 Nano
+    const emailContent = await gpt5NanoService.generateExpirationEmailContent({
+      employeeName: `${document.employees.first_name} ${document.employees.last_name}`,
+      employeeCode: document.employees.employee_id,
+      documentType: document.document_type || 'Documento',
+      daysUntilExpiration,
+      expirationDate: expirationDate.toLocaleDateString('es-GT', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }),
+      urgencyLevel
+    });
+
+    res.json({
+      success: true,
+      preview,
+      document: {
+        id: document.id,
+        type: document.document_type || 'Documento',
+        employee: {
+          name: `${document.employees.first_name} ${document.employees.last_name}`,
+          code: document.employees.employee_id,
+          email: document.employees.email,
+          position: document.employees.position,
+          department: document.employees.department
+        },
+        expiration_date: document.expiration_date,
+        days_until_expiration: daysUntilExpiration,
+        urgency_level: urgencyLevel
+      },
+      email: emailContent
+    });
+  } catch (error) {
+    console.error('Error generando contenido de email:', error);
+    res.status(500).json({ error: 'Error interno del servidor', details: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/automated-notifications/send-renewal-email:
+ *   post:
+ *     summary: Enviar email de renovación con contenido generado por GPT-5 Nano
+ *     tags: [AutomatedNotifications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               documentId:
+ *                 type: string
+ *               customContent:
+ *                 type: object
+ *                 properties:
+ *                   subject:
+ *                     type: string
+ *                   body:
+ *                     type: string
+ *     responses:
+ *       200:
+ *         description: Email enviado exitosamente
+ */
+router.post('/send-renewal-email', verifyToken, [
+  body('documentId').isString().trim(),
+  body('customContent').optional().isObject()
+], async (req, res) => {
+  try {
+    const userRole = req.user?.profile?.role || req.user?.role || req.user?.user_metadata?.role;
+    if (userRole !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { documentId, customContent } = req.body;
+
+    // Obtener documento completo
+    const { data: document, error: docError } = await supabase
+      .from('employee_document_requirements')
+      .select(`
+        *,
+        employees!employee_document_requirements_employee_id_fkey(
+          id,
+          employee_id,
+          first_name,
+          last_name,
+          email
+        )
+      `)
+      .eq('id', documentId)
+      .single();
+
+    if (docError || !document) {
+      return res.status(404).json({ error: 'Documento no encontrado' });
+    }
+
+    if (!document.employees?.email) {
+      return res.status(400).json({ error: 'El empleado no tiene email configurado' });
+    }
+
+    // Calcular días hasta vencimiento
+    const expirationDate = new Date(document.expiration_date);
+    const today = new Date();
+    const daysUntilExpiration = Math.ceil((expirationDate - today) / (1000 * 60 * 60 * 24));
+
+    let urgencyLevel = 'medium';
+    if (daysUntilExpiration <= 3) urgencyLevel = 'urgent';
+    else if (daysUntilExpiration <= 7) urgencyLevel = 'high';
+
+    // Generar o usar contenido personalizado
+    let emailContent;
+    if (customContent && customContent.subject && customContent.body) {
+      emailContent = {
+        success: true,
+        subject: customContent.subject,
+        body: customContent.body,
+        metadata: { custom: true }
+      };
+    } else {
+      emailContent = await gpt5NanoService.generateExpirationEmailContent({
+        employeeName: `${document.employees.first_name} ${document.employees.last_name}`,
+        employeeCode: document.employees.employee_id,
+        documentType: document.document_type || 'Documento',
+        daysUntilExpiration,
+        expirationDate: expirationDate.toLocaleDateString('es-GT'),
+        urgencyLevel
+      });
+    }
+
+    // Enviar email con Resend
+    const emailResult = await emailService.sendEmail({
+      to: document.employees.email,
+      subject: emailContent.subject,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+            <h1 style="color: white; margin: 0;">MINEDUC - Gestión Documental</h1>
+          </div>
+          <div style="padding: 30px; background-color: #f9fafb;">
+            <div style="white-space: pre-wrap; line-height: 1.6; color: #374151;">
+              ${emailContent.body}
+            </div>
+            <div style="margin-top: 30px; padding: 20px; background-color: white; border-radius: 8px; border-left: 4px solid #667eea;">
+              <h3 style="margin-top: 0; color: #667eea;">Información del Documento</h3>
+              <p><strong>Tipo:</strong> ${document.document_type || 'Documento'}</p>
+              <p><strong>Fecha de vencimiento:</strong> ${expirationDate.toLocaleDateString('es-GT')}</p>
+              <p><strong>Días restantes:</strong> ${daysUntilExpiration} día${daysUntilExpiration !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          <div style="padding: 20px; text-align: center; color: #6b7280; font-size: 12px;">
+            <p>Este es un mensaje automático del Sistema de Gestión Documental del MINEDUC</p>
+            ${emailContent.metadata?.model ? `<p>Generado con IA: ${emailContent.metadata.model}</p>` : ''}
+          </div>
+        </div>
+      `
+    });
+
+    // Registrar el envío en la base de datos
+    await supabase
+      .from('email_logs')
+      .insert({
+        recipient: document.employees.email,
+        subject: emailContent.subject,
+        type: 'document_expiration',
+        status: emailResult.success ? 'sent' : 'failed',
+        metadata: {
+          document_id: documentId,
+          employee_id: document.employee_id,
+          days_until_expiration: daysUntilExpiration,
+          urgency_level: urgencyLevel,
+          ai_generated: emailContent.success,
+          email_id: emailResult.id
+        },
+        sent_at: new Date().toISOString()
+      });
+
+    res.json({
+      success: true,
+      message: 'Email enviado exitosamente',
+      email: {
+        to: document.employees.email,
+        subject: emailContent.subject,
+        aiGenerated: emailContent.success
+      },
+      emailResult
+    });
+  } catch (error) {
+    console.error('Error enviando email de renovación:', error);
+    res.status(500).json({ error: 'Error interno del servidor', details: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/automated-notifications/bulk-send:
+ *   post:
+ *     summary: Enviar emails masivos para múltiples documentos
+ *     tags: [AutomatedNotifications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               documentIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Emails enviados exitosamente
+ */
+router.post('/bulk-send', verifyToken, [
+  body('documentIds').isArray().notEmpty()
+], async (req, res) => {
+  try {
+    const userRole = req.user?.profile?.role || req.user?.role || req.user?.user_metadata?.role;
+    if (userRole !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { documentIds } = req.body;
+    const results = [];
+
+    for (const documentId of documentIds) {
+      try {
+        // Reutilizar la lógica del endpoint individual
+        const { data: document, error: docError } = await supabase
+          .from('employee_document_requirements')
+          .select(`
+            *,
+            employees!employee_document_requirements_employee_id_fkey(
+              id,
+              employee_id,
+              first_name,
+              last_name,
+              email
+            )
+          `)
+          .eq('id', documentId)
+          .single();
+
+        if (docError || !document || !document.employees?.email) {
+          results.push({
+            documentId,
+            success: false,
+            error: 'Documento no encontrado o sin email'
+          });
+          continue;
+        }
+
+        const expirationDate = new Date(document.expiration_date);
+        const today = new Date();
+        const daysUntilExpiration = Math.ceil((expirationDate - today) / (1000 * 60 * 60 * 24));
+
+        let urgencyLevel = 'medium';
+        if (daysUntilExpiration <= 3) urgencyLevel = 'urgent';
+        else if (daysUntilExpiration <= 7) urgencyLevel = 'high';
+
+        const emailContent = await gpt5NanoService.generateExpirationEmailContent({
+          employeeName: `${document.employees.first_name} ${document.employees.last_name}`,
+          employeeCode: document.employees.employee_id,
+          documentType: document.document_type || 'Documento',
+          daysUntilExpiration,
+          expirationDate: expirationDate.toLocaleDateString('es-GT'),
+          urgencyLevel
+        });
+
+        const emailResult = await emailService.sendEmail({
+          to: document.employees.email,
+          subject: emailContent.subject,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+                <h1 style="color: white; margin: 0;">MINEDUC - Gestión Documental</h1>
+              </div>
+              <div style="padding: 30px; background-color: #f9fafb;">
+                <div style="white-space: pre-wrap; line-height: 1.6; color: #374151;">
+                  ${emailContent.body}
+                </div>
+                <div style="margin-top: 30px; padding: 20px; background-color: white; border-radius: 8px; border-left: 4px solid #667eea;">
+                  <h3 style="margin-top: 0; color: #667eea;">Información del Documento</h3>
+                  <p><strong>Tipo:</strong> ${document.document_type || 'Documento'}</p>
+                  <p><strong>Fecha de vencimiento:</strong> ${expirationDate.toLocaleDateString('es-GT')}</p>
+                  <p><strong>Días restantes:</strong> ${daysUntilExpiration} día${daysUntilExpiration !== 1 ? 's' : ''}</p>
+                </div>
+              </div>
+              <div style="padding: 20px; text-align: center; color: #6b7280; font-size: 12px;">
+                <p>Este es un mensaje automático del Sistema de Gestión Documental del MINEDUC</p>
+              </div>
+            </div>
+          `
+        });
+
+        await supabase.from('email_logs').insert({
+          recipient: document.employees.email,
+          subject: emailContent.subject,
+          type: 'document_expiration',
+          status: emailResult.success ? 'sent' : 'failed',
+          metadata: {
+            document_id: documentId,
+            employee_id: document.employee_id,
+            days_until_expiration: daysUntilExpiration,
+            urgency_level: urgencyLevel,
+            ai_generated: emailContent.success,
+            email_id: emailResult.id,
+            bulk_send: true
+          },
+          sent_at: new Date().toISOString()
+        });
+
+        results.push({
+          documentId,
+          success: true,
+          email: document.employees.email
+        });
+
+        // Pequeña pausa entre envíos para no saturar
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+      } catch (error) {
+        results.push({
+          documentId,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    const summary = {
+      total: documentIds.length,
+      successful: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length
+    };
+
+    res.json({
+      success: true,
+      message: `Envío masivo completado: ${summary.successful}/${summary.total} exitosos`,
+      summary,
+      results
+    });
+  } catch (error) {
+    console.error('Error en envío masivo:', error);
+    res.status(500).json({ error: 'Error interno del servidor', details: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/automated-notifications/email-logs:
+ *   get:
+ *     summary: Obtener histórico de emails enviados
+ *     tags: [AutomatedNotifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: number
+ *         description: Límite de resultados (default 50)
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [sent, failed, pending]
+ *         description: Filtrar por estado
+ *     responses:
+ *       200:
+ *         description: Logs obtenidos exitosamente
+ */
+router.get('/email-logs', verifyToken, async (req, res) => {
+  try {
+    const userRole = req.user?.profile?.role || req.user?.role || req.user?.user_metadata?.role;
+    if (userRole !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+
+    const limit = parseInt(req.query.limit) || 50;
+    const status = req.query.status;
+
+    let query = supabase
+      .from('email_logs')
+      .select('*')
+      .order('sent_at', { ascending: false })
+      .limit(limit);
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data: logs, error } = await query;
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    const summary = {
+      total: logs.length,
+      sent: logs.filter(l => l.status === 'sent').length,
+      failed: logs.filter(l => l.status === 'failed').length,
+      pending: logs.filter(l => l.status === 'pending').length
+    };
+
+    res.json({
+      success: true,
+      data: logs,
+      summary
+    });
+  } catch (error) {
+    console.error('Error obteniendo logs de email:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });

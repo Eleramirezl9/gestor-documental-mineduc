@@ -3,12 +3,12 @@ const emailService = require('./services/emailService');
 const aiMessageService = require('./services/aiMessageService');
 
 async function sendTestEmailToColaborador() {
-  console.log('📧 Enviando email de prueba a colaborador...');
+  console.log(' Enviando email de prueba a colaborador...');
   console.log('=' .repeat(60));
 
   try {
     // 1. Generar mensaje personalizado con IA
-    console.log('🤖 Generando mensaje personalizado con IA...');
+    console.log(' Generando mensaje personalizado con IA...');
     
     const messageResult = await aiMessageService.generateNotificationMessage({
       type: 'document_expiration',
