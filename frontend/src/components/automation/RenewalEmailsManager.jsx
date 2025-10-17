@@ -435,7 +435,7 @@ export default function RenewalEmailsManager() {
                         )}
                         <div className="flex items-center gap-1">
                           <Clock className="w-4 h-4" />
-                          <span>Vence: {new Date(doc.expiration_date).toLocaleDateString('es-GT')}</span>
+                          <span>Vence: {new Date(doc.required_date).toLocaleDateString('es-GT')}</span>
                         </div>
                       </div>
                     </div>

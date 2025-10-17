@@ -612,10 +612,10 @@ router.get('/renewals/pending', verifyToken, [
           department
         )
       `)
-      .eq('status', 'active')
-      .not('expiration_date', 'is', null)
-      .lte('expiration_date', targetDateString)
-      .order('expiration_date', { ascending: true });
+      .eq('status', 'pending')
+      .not('required_date', 'is', null)
+      .lte('required_date', targetDateString)
+      .order('required_date', { ascending: true });
 
     const { data: documents, error } = await query;
 
@@ -626,7 +626,7 @@ router.get('/renewals/pending', verifyToken, [
 
     // Calcular días hasta vencimiento y clasificar por urgencia
     const enrichedDocuments = documents.map(doc => {
-      const expirationDate = new Date(doc.expiration_date);
+      const expirationDate = new Date(doc.required_date);
       const today = new Date();
       const daysUntilExpiration = Math.ceil((expirationDate - today) / (1000 * 60 * 60 * 24));
 
@@ -750,7 +750,7 @@ router.post('/generate-email-content', verifyToken, [
     }
 
     // Calcular días hasta vencimiento
-    const expirationDate = new Date(document.expiration_date);
+    const expirationDate = new Date(document.required_date);
     const today = new Date();
     const daysUntilExpiration = Math.ceil((expirationDate - today) / (1000 * 60 * 60 * 24));
 
@@ -785,7 +785,7 @@ router.post('/generate-email-content', verifyToken, [
           position: document.employees.position,
           department: document.employees.department
         },
-        expiration_date: document.expiration_date,
+        expiration_date: document.required_date,
         days_until_expiration: daysUntilExpiration,
         urgency_level: urgencyLevel
       },
@@ -867,7 +867,7 @@ router.post('/send-renewal-email', verifyToken, [
     }
 
     // Calcular días hasta vencimiento
-    const expirationDate = new Date(document.expiration_date);
+    const expirationDate = new Date(document.required_date);
     const today = new Date();
     const daysUntilExpiration = Math.ceil((expirationDate - today) / (1000 * 60 * 60 * 24));
 
@@ -1025,7 +1025,7 @@ router.post('/bulk-send', verifyToken, [
           continue;
         }
 
-        const expirationDate = new Date(document.expiration_date);
+        const expirationDate = new Date(document.required_date);
         const today = new Date();
         const daysUntilExpiration = Math.ceil((expirationDate - today) / (1000 * 60 * 60 * 24));
 
