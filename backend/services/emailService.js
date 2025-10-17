@@ -535,6 +535,220 @@ Sistema de Gestión Documental - MINEDUC
 
     return await Promise.all(promises);
   }
+
+  /**
+   * Envía email de bienvenida a nuevo empleado
+   */
+  async sendWelcomeEmail({ employeeEmail, employeeName, employeeCode, position, department }) {
+    const subject = '¡Bienvenido al Sistema de Gestión Documental del MINEDUC!';
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bienvenida MINEDUC</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f3f4f6; padding: 20px 0;">
+        <tr>
+            <td align="center">
+                <table role="presentation" style="max-width: 600px; width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+
+                    <!-- Header con gradiente -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
+                            <h1 style="margin: 0; color: white; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">
+                                ¡Bienvenido a MINEDUC!
+                            </h1>
+                            <p style="margin: 10px 0 0 0; color: rgba(255, 255, 255, 0.9); font-size: 16px;">
+                                Sistema de Gestión Documental
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Contenido principal -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <p style="margin: 0 0 20px 0; font-size: 18px; color: #1f2937; font-weight: 600;">
+                                Estimado/a ${employeeName},
+                            </p>
+
+                            <p style="margin: 0 0 20px 0; font-size: 16px; line-height: 1.6; color: #4b5563;">
+                                Es un placer darle la bienvenida al Ministerio de Educación de Guatemala. A partir de hoy, forma parte de nuestro equipo comprometido con la excelencia educativa del país.
+                            </p>
+
+                            <p style="margin: 0 0 30px 0; font-size: 16px; line-height: 1.6; color: #4b5563;">
+                                Hemos registrado su información en nuestro Sistema de Gestión Documental, donde podrá consultar y gestionar toda su documentación laboral de manera segura y eficiente.
+                            </p>
+
+                            <!-- Tarjeta de información del empleado -->
+                            <table role="presentation" style="width: 100%; border-collapse: collapse; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 8px; padding: 20px; margin: 0 0 30px 0; border-left: 4px solid #3b82f6;">
+                                <tr>
+                                    <td>
+                                        <h3 style="margin: 0 0 15px 0; color: #1e40af; font-size: 18px; font-weight: 600;">
+                                            📋 Su Información
+                                        </h3>
+                                        <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                                            <tr>
+                                                <td style="padding: 8px 0; font-size: 15px; color: #374151;">
+                                                    <strong style="color: #1f2937;">Código de Empleado:</strong>
+                                                </td>
+                                                <td style="padding: 8px 0; font-size: 15px; color: #374151; text-align: right;">
+                                                    <code style="background: white; padding: 4px 8px; border-radius: 4px; font-family: monospace; color: #3b82f6; font-weight: 600;">
+                                                        ${employeeCode}
+                                                    </code>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 8px 0; font-size: 15px; color: #374151;">
+                                                    <strong style="color: #1f2937;">Cargo:</strong>
+                                                </td>
+                                                <td style="padding: 8px 0; font-size: 15px; color: #374151; text-align: right;">
+                                                    ${position || 'No especificado'}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 8px 0; font-size: 15px; color: #374151;">
+                                                    <strong style="color: #1f2937;">Departamento:</strong>
+                                                </td>
+                                                <td style="padding: 8px 0; font-size: 15px; color: #374151; text-align: right;">
+                                                    ${department || 'No especificado'}
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Sección de información importante -->
+                            <table role="presentation" style="width: 100%; border-collapse: collapse; background: #fef3c7; border-radius: 8px; padding: 20px; margin: 0 0 30px 0; border-left: 4px solid #f59e0b;">
+                                <tr>
+                                    <td>
+                                        <h3 style="margin: 0 0 10px 0; color: #92400e; font-size: 16px; font-weight: 600;">
+                                            ℹ️ Información Importante
+                                        </h3>
+                                        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #78350f;">
+                                            A través de nuestro sistema recibirá notificaciones automáticas sobre documentos requeridos, fechas de vencimiento y actualizaciones importantes.
+                                            <strong>Guarde su código de empleado</strong> (${employeeCode}) ya que lo necesitará para consultas futuras.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Qué esperar -->
+                            <h3 style="margin: 0 0 15px 0; color: #1f2937; font-size: 18px; font-weight: 600;">
+                                📬 ¿Qué puede esperar de este sistema?
+                            </h3>
+
+                            <ul style="margin: 0 0 30px 0; padding-left: 20px; color: #4b5563; font-size: 15px; line-height: 1.8;">
+                                <li style="margin-bottom: 8px;">Notificaciones automáticas sobre documentos próximos a vencer</li>
+                                <li style="margin-bottom: 8px;">Recordatorios de documentación requerida</li>
+                                <li style="margin-bottom: 8px;">Seguimiento del estado de sus documentos</li>
+                                <li style="margin-bottom: 8px;">Acceso seguro a su expediente digital</li>
+                                <li>Comunicación directa con el departamento de Recursos Humanos</li>
+                            </ul>
+
+                            <!-- Contacto -->
+                            <table role="presentation" style="width: 100%; border-collapse: collapse; background: #f9fafb; border-radius: 8px; padding: 20px; margin: 0 0 20px 0;">
+                                <tr>
+                                    <td>
+                                        <h3 style="margin: 0 0 10px 0; color: #1f2937; font-size: 16px; font-weight: 600;">
+                                            📞 ¿Necesita ayuda?
+                                        </h3>
+                                        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #4b5563;">
+                                            Si tiene alguna pregunta o necesita asistencia, no dude en contactar al Departamento de Recursos Humanos del MINEDUC. Estamos aquí para apoyarle en todo momento.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 0 0 10px 0; font-size: 16px; line-height: 1.6; color: #4b5563;">
+                                Le deseamos mucho éxito en su nueva posición y esperamos que su experiencia en el MINEDUC sea enriquecedora y productiva.
+                            </p>
+
+                            <p style="margin: 20px 0 0 0; font-size: 16px; color: #4b5563;">
+                                <strong>Atentamente,</strong><br>
+                                <span style="color: #1e40af; font-weight: 600;">Ministerio de Educación de Guatemala</span><br>
+                                <span style="font-size: 14px; color: #6b7280;">Departamento de Recursos Humanos</span>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                            <p style="margin: 0 0 10px 0; font-size: 12px; color: #6b7280; line-height: 1.6;">
+                                Este es un mensaje automático del Sistema de Gestión Documental del MINEDUC.<br>
+                                Por favor, no responda a este correo.
+                            </p>
+                            <p style="margin: 0; font-size: 11px; color: #9ca3af;">
+                                © ${new Date().getFullYear()} Ministerio de Educación - Guatemala<br>
+                                Todos los derechos reservados
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+    `;
+
+    const textContent = `
+¡Bienvenido/a al MINEDUC!
+
+Estimado/a ${employeeName},
+
+Es un placer darle la bienvenida al Ministerio de Educación de Guatemala. A partir de hoy, forma parte de nuestro equipo comprometido con la excelencia educativa del país.
+
+SU INFORMACIÓN:
+- Código de Empleado: ${employeeCode}
+- Cargo: ${position || 'No especificado'}
+- Departamento: ${department || 'No especificado'}
+
+INFORMACIÓN IMPORTANTE:
+A través de nuestro sistema recibirá notificaciones automáticas sobre documentos requeridos, fechas de vencimiento y actualizaciones importantes. Guarde su código de empleado (${employeeCode}) ya que lo necesitará para consultas futuras.
+
+¿QUÉ PUEDE ESPERAR DE ESTE SISTEMA?
+- Notificaciones automáticas sobre documentos próximos a vencer
+- Recordatorios de documentación requerida
+- Seguimiento del estado de sus documentos
+- Acceso seguro a su expediente digital
+- Comunicación directa con el departamento de Recursos Humanos
+
+¿NECESITA AYUDA?
+Si tiene alguna pregunta o necesita asistencia, no dude en contactar al Departamento de Recursos Humanos del MINEDUC.
+
+Le deseamos mucho éxito en su nueva posición.
+
+Atentamente,
+Ministerio de Educación de Guatemala
+Departamento de Recursos Humanos
+
+---
+Este es un mensaje automático. Por favor, no responda a este correo.
+© ${new Date().getFullYear()} Ministerio de Educación - Guatemala
+    `;
+
+    try {
+      const result = await this.sendEmail({
+        to: employeeEmail,
+        subject,
+        htmlContent,
+        textContent,
+        category: 'employee_welcome'
+      });
+
+      console.log(`✅ Email de bienvenida enviado a ${employeeName} (${employeeEmail})`);
+      return result;
+    } catch (error) {
+      console.error(`❌ Error enviando email de bienvenida a ${employeeEmail}:`, error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new EmailService();

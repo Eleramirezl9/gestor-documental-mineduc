@@ -3,6 +3,7 @@ const { body, query, validationResult } = require('express-validator');
 const { verifyToken } = require('../middleware/auth');
 const employeeDocumentService = require('../services/employeeDocumentService');
 const auditService = require('../services/auditService');
+const emailService = require('../services/emailService');
 const { supabase, supabaseAdmin } = require('../config/supabase');
 
 const router = express.Router();
@@ -126,6 +127,24 @@ router.post('/register', verifyToken, [
           required_documents_count: employeeData.required_documents?.length || 0
         }
       });
+
+      // Enviar email de bienvenida al nuevo empleado
+      if (employeeData.email) {
+        try {
+          console.log('📧 Enviando email de bienvenida a:', employeeData.email);
+          await emailService.sendWelcomeEmail({
+            employeeEmail: employeeData.email,
+            employeeName: `${employeeData.first_name} ${employeeData.last_name}`,
+            employeeCode: result.employee.employee_id,
+            position: employeeData.position || null,
+            department: employeeData.department
+          });
+          console.log('✅ Email de bienvenida enviado exitosamente');
+        } catch (emailError) {
+          // No falla el registro si el email falla, solo registra el error
+          console.error('⚠️ Error enviando email de bienvenida (no crítico):', emailError.message);
+        }
+      }
 
       res.status(201).json(result);
     } else {

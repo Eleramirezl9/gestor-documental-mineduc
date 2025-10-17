@@ -191,8 +191,11 @@ export default function RenewalEmailsManager() {
     try {
       setSending(true);
 
+      // Aumentar timeout para envío masivo (1 minuto)
       const response = await api.post('/automated-notifications/bulk-send', {
         documentIds: selectedDocuments
+      }, {
+        timeout: 60000 // 60 segundos
       });
 
       if (response.data.success) {
