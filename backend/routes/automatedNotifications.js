@@ -1,6 +1,6 @@
 const express = require('express');
 const { body, validationResult, query } = require('express-validator');
-const { supabase } = require('../config/supabase');
+const { supabase, supabaseAdmin } = require('../config/supabase');
 const { verifyToken } = require('../middleware/auth');
 const automatedNotificationService = require('../services/automatedNotificationService');
 const aiMessageService = require('../services/aiMessageService');
@@ -1155,7 +1155,9 @@ router.get('/email-logs', verifyToken, async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const status = req.query.status;
 
-    let query = supabase
+    console.log('📧 Consultando email_logs con límite:', limit, 'estado:', status || 'todos');
+
+    let query = supabaseAdmin
       .from('email_logs')
       .select('*')
       .order('sent_at', { ascending: false })
@@ -1168,8 +1170,11 @@ router.get('/email-logs', verifyToken, async (req, res) => {
     const { data: logs, error } = await query;
 
     if (error) {
+      console.error('❌ Error en query de email_logs:', error);
       return res.status(400).json({ error: error.message });
     }
+
+    console.log('✅ Logs obtenidos:', logs?.length || 0);
 
     const summary = {
       total: logs.length,
