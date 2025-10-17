@@ -416,12 +416,29 @@ Genera una versión mejorada (máximo 120 palabras):`;
    * Verifica si el servicio de IA está disponible
    */
   async checkAvailability() {
-    try {
-      await this.callAI('Test', { maxTokens: 10 });
-      return { available: true, provider: this.useGroq ? 'Groq' : 'OpenAI' };
-    } catch (error) {
-      return { available: false, error: error.message };
+    // Si hay API key de Groq u OpenAI en aiMessageService
+    if (this.apiKey) {
+      return {
+        available: true,
+        provider: this.useGroq ? 'Groq' : 'OpenAI'
+      };
     }
+
+    // Fallback: verificar GPT-5 Nano
+    const gpt5NanoService = require('./gpt5NanoService');
+    if (gpt5NanoService.isAvailable) {
+      return {
+        available: true,
+        provider: 'GPT-5 Nano'
+      };
+    }
+
+    // No hay ningún servicio disponible
+    return {
+      available: false,
+      error: 'No se ha configurado ninguna API key de IA (GROQ_API_KEY, OPENAI_API_KEY, o GPT5_NANO_API_KEY)',
+      provider: 'none'
+    };
   }
 }
 
