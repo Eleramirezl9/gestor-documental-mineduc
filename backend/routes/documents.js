@@ -1020,8 +1020,22 @@ router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.sin
       parsedTags = [...new Set([...parsedTags, ...aiClassification.keywords])];
     }
 
+    // Mapear prioridades de español a inglés
+    const priorityMap = {
+      'bajo': 'low',
+      'baja': 'low',
+      'normal': 'normal',
+      'medio': 'normal',
+      'alta': 'high',
+      'alto': 'high',
+      'urgente': 'urgent'
+    };
+
+    const finalPriority = priority || aiClassification?.priority || 'normal';
+    const mappedPriority = priorityMap[finalPriority.toLowerCase()] || 'normal';
+
     // Crear registro en la base de datos
-    const { data: document, error: dbError } = await supabaseAdmin
+    const { data: document, error: dbError} = await supabaseAdmin
       .from('documents')
       .insert({
         title: title || req.file.originalname,
@@ -1029,7 +1043,7 @@ router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.sin
         file_name: req.file.originalname,
         file_path: filePath,
         file_size: processedSize,
-        file_type: req.file.mimetype.split('/')[1],
+        file_type: (req.file.mimetype.split('/')[1] || 'unknown').substring(0, 50),
         mime_type: req.file.mimetype,
         category_id: finalCategoryId,
         tags: parsedTags,
@@ -1041,7 +1055,7 @@ router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.sin
         expiration_date: expirationDate,
         created_by: userId,
         file_hash: fileHash,
-        priority: priority || aiClassification?.priority || 'normal',
+        priority: mappedPriority,
         classification_level: aiClassification?.classificationLevel || 'public',
         keywords: aiClassification?.keywords || [],
         language: aiClassification?.language || 'es',
@@ -1054,6 +1068,36 @@ router.post('/upload', verifyToken, requireRole(['admin', 'editor']), upload.sin
       await deleteFile(filePath);
       console.error('Database error:', dbError);
       throw new Error(`Error al guardar en base de datos: ${dbError.message}`);
+    }
+
+    // Si es documento de empleado, actualizar el estado del requirement
+    if (isEmployeeDocument && employeeId) {
+      // Buscar el requirement que corresponde a este tipo de documento
+      const tipoTag = parsedTagsForDuplicateCheck.find(tag => tag.startsWith('tipo:'));
+      if (tipoTag) {
+        const documentType = tipoTag.replace('tipo:', '');
+
+        const { data: existingReq, error: reqError } = await supabaseAdmin
+          .from('employee_document_requirements')
+          .select('id')
+          .eq('employee_id', employeeId)
+          .eq('document_type', documentType)
+          .maybeSingle();
+
+        if (existingReq) {
+          // Actualizar el requirement con el ID del documento y cambiar estado a 'submitted'
+          await supabaseAdmin
+            .from('employee_document_requirements')
+            .update({
+              document_id: document.id,
+              status: 'submitted',
+              submitted_at: new Date().toISOString()
+            })
+            .eq('id', existingReq.id);
+
+          console.log(`✅ Updated requirement ${existingReq.id} for document type "${documentType}"`);
+        }
+      }
     }
 
     // Actualizar uso de storage del usuario

@@ -857,7 +857,7 @@ router.get('/employee/:employee_id', verifyToken, async (req, res) => {
     // Buscar el UUID del empleado primero
     const { data: employee, error: employeeError } = await supabaseAdmin
       .from('employees')
-      .select('id')
+      .select('id, user_id')
       .eq('employee_id', employee_id)
       .single();
 
@@ -870,7 +870,7 @@ router.get('/employee/:employee_id', verifyToken, async (req, res) => {
     }
 
     // Ahora buscar los documentos usando el UUID con supabaseAdmin para bypassear RLS
-    const { data, error } = await supabaseAdmin
+    const { data: requirements, error } = await supabaseAdmin
       .from('employee_document_requirements')
       .select('*')
       .eq('employee_id', employee.id)
@@ -879,9 +879,83 @@ router.get('/employee/:employee_id', verifyToken, async (req, res) => {
 
     if (error) throw error;
 
+    // Para cada requerimiento, buscar si hay un archivo subido
+    const requirementsWithFiles = await Promise.all(
+      (requirements || []).map(async (req) => {
+        let uploadedDoc = null;
+        let fileUrl = null;
+
+        console.log(`🔍 Buscando documento para requirement ${req.id}, tipo: ${req.document_type}, document_id: ${req.document_id}`);
+
+        // Si el requirement tiene document_id, buscar directamente por ID
+        if (req.document_id) {
+          const { data: doc } = await supabaseAdmin
+            .from('documents')
+            .select('id, file_path, file_name, file_size, mime_type, created_at, title')
+            .eq('id', req.document_id)
+            .maybeSingle();
+
+          uploadedDoc = doc;
+          console.log(`📄 Documento encontrado por ID:`, uploadedDoc ? 'SÍ' : 'NO');
+        } else {
+          // Si no tiene document_id, buscar por tags (fallback para documentos antiguos)
+          // Buscar documentos que tengan ambos tags
+          const { data: docs } = await supabaseAdmin
+            .from('documents')
+            .select('id, file_path, file_name, file_size, mime_type, created_at, title, tags')
+            .order('created_at', { ascending: false })
+            .limit(100); // Limitar a los últimos 100 documentos para mejorar performance
+
+          // Filtrar manualmente por tags que contengan el empleado y tipo
+          const matchingDoc = docs?.find(d =>
+            Array.isArray(d.tags) &&
+            d.tags.some(tag => tag === `empleado:${employee.id}`) &&
+            d.tags.some(tag => tag === `tipo:${req.document_type}`)
+          );
+
+          uploadedDoc = matchingDoc;
+        }
+
+        // Si hay documento subido, obtener URL pública
+        if (uploadedDoc && uploadedDoc.file_path) {
+          console.log(`🔗 Generando URL firmada para: ${uploadedDoc.file_path}`);
+          const { data: urlData, error: urlError } = await supabaseAdmin
+            .storage
+            .from('documents')
+            .createSignedUrl(uploadedDoc.file_path, 3600); // URL válida por 1 hora
+
+          if (urlError) {
+            console.error(`❌ Error generando URL firmada:`, urlError);
+          } else {
+            fileUrl = urlData?.signedUrl || null;
+            console.log(`✅ URL firmada generada:`, fileUrl ? 'SÍ' : 'NO');
+          }
+        } else {
+          console.log(`⚠️  No hay documento o file_path para generar URL`);
+        }
+
+        return {
+          ...req,
+          id: req.id,
+          documentName: req.document_type,
+          dueDate: req.required_date,
+          assignedAt: req.created_at,
+          notes: req.description,
+          fileUrl: fileUrl,
+          uploadedFile: uploadedDoc ? {
+            id: uploadedDoc.id,
+            fileName: uploadedDoc.file_name,
+            fileSize: uploadedDoc.file_size,
+            mimeType: uploadedDoc.mime_type,
+            uploadedAt: uploadedDoc.created_at
+          } : null
+        };
+      })
+    );
+
     res.json({
       success: true,
-      data: data || []
+      data: requirementsWithFiles
     });
   } catch (error) {
     console.error('Error obteniendo documentos del empleado:', error);

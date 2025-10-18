@@ -111,7 +111,7 @@ const EmployeeDocumentUploadDialog = ({
       const tags = JSON.stringify([
         `empleado:${employeeId}`,  // Formato: empleado:UUID para identificar la carpeta
         `codigo:${employeeCode}`,  // Agregar código del empleado (MIN25001) para identificación visual
-        documentType,
+        `tipo:${documentType}`,    // Tipo de documento para facilitar búsqueda
         'empleado',
         'requerimiento'
       ]);

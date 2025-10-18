@@ -106,7 +106,7 @@ export const useEmployeeDocumentAssignment = (employeeId) => {
           assignedAt: doc.created_at,
           uploadDate: doc.upload_date,
           fileName: doc.file_name,
-          fileUrl: doc.file_url,
+          fileUrl: doc.fileUrl, // El backend devuelve fileUrl en camelCase
           // Campos de renovación personalizada del assignment
           has_custom_renewal: doc.has_custom_renewal,
           custom_renewal_period: doc.custom_renewal_period,

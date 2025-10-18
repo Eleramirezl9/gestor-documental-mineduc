@@ -1333,7 +1333,7 @@ const EmployeeManagement = () => {
       aprobado: documents.filter(d => d.status === 'aprobado' || d.status === 'approved').length,
       pendiente: documents.filter(d => d.status === 'pendiente' || d.status === 'pending').length,
       rechazado: documents.filter(d => d.status === 'rechazado' || d.status === 'rejected').length,
-      subido: documents.filter(d => d.status === 'subido' || d.status === 'uploaded').length,
+      subido: documents.filter(d => d.status === 'subido' || d.status === 'uploaded' || d.status === 'submitted').length,
       vencido: 0,
       completionRate: documents.length > 0
         ? Math.round((documents.filter(d => d.status === 'aprobado' || d.status === 'approved').length / documents.length) * 100)
@@ -1506,7 +1506,7 @@ const EmployeeManagement = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-blue-700 dark:text-blue-400 font-medium">Subidos</p>
-                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{documents.filter(d => d.status === 'uploaded' || d.status === 'subido').length}</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{documents.filter(d => d.status === 'uploaded' || d.status === 'subido' || d.status === 'submitted').length}</p>
                 </div>
                 <Upload className="h-8 w-8 text-blue-500" />
               </div>
@@ -1551,6 +1551,16 @@ const EmployeeManagement = () => {
                 const dueDate = doc.dueDate;
                 const priority = doc.priority || 'normal';
                 const notes = doc.notes;
+
+                // Debug: ver si viene el fileUrl
+                if (doc.fileUrl) {
+                  console.log(`✅ Documento "${docName}" tiene fileUrl:`, doc.fileUrl);
+                } else {
+                  console.log(`❌ Documento "${docName}" NO tiene fileUrl.`);
+                  console.log('Todas las propiedades:', Object.keys(doc));
+                  console.log('fileUrl value:', doc.fileUrl);
+                  console.log('file_url value:', doc.file_url);
+                }
 
                 return (
                   <div
@@ -1616,7 +1626,7 @@ const EmployeeManagement = () => {
                                 ? 'bg-[#27AE60]/20 text-[#27AE60] dark:bg-[#27AE60]/20 dark:text-[#27AE60] border-2 border-[#27AE60]/30' :
                               docStatus === 'rejected' || docStatus === 'rechazado'
                                 ? 'bg-[#C0392B]/20 text-[#C0392B] dark:bg-[#C0392B]/20 dark:text-[#C0392B] border-2 border-[#C0392B]/30' :
-                              docStatus === 'uploaded' || docStatus === 'subido'
+                              docStatus === 'uploaded' || docStatus === 'subido' || docStatus === 'submitted'
                                 ? 'bg-[#3B82F6]/20 text-[#3B82F6] dark:bg-[#3B82F6]/20 dark:text-[#3B82F6] border-2 border-[#3B82F6]/30' :
                               'bg-[#F39C12]/20 text-[#F39C12] dark:bg-[#F39C12]/20 dark:text-[#F39C12] border-2 border-[#F39C12]/30'
                             }`}
@@ -1625,9 +1635,16 @@ const EmployeeManagement = () => {
                           >
                             {(docStatus === 'approved' || docStatus === 'aprobado') && <CheckCircle className="h-3.5 w-3.5" />}
                             {(docStatus === 'rejected' || docStatus === 'rechazado') && <XCircle className="h-3.5 w-3.5" />}
-                            {(docStatus === 'uploaded' || docStatus === 'subido') && <Upload className="h-3.5 w-3.5" />}
-                            {docStatus === 'pending' && <Clock className="h-3.5 w-3.5" />}
-                            <span className="capitalize">{docStatus === 'pending' ? 'Pendiente' : docStatus === 'approved' ? 'Aprobado' : docStatus === 'rejected' ? 'Rechazado' : docStatus === 'uploaded' ? 'Subido' : docStatus}</span>
+                            {(docStatus === 'uploaded' || docStatus === 'subido' || docStatus === 'submitted') && <Upload className="h-3.5 w-3.5" />}
+                            {(docStatus === 'pending' || docStatus === 'pendiente') && <Clock className="h-3.5 w-3.5" />}
+                            <span className="capitalize">{
+                              docStatus === 'pending' || docStatus === 'pendiente' ? 'Pendiente' :
+                              docStatus === 'approved' || docStatus === 'aprobado' ? 'Aprobado' :
+                              docStatus === 'rejected' || docStatus === 'rechazado' ? 'Rechazado' :
+                              docStatus === 'uploaded' || docStatus === 'subido' ? 'Subido' :
+                              docStatus === 'submitted' ? 'Subido' :
+                              docStatus
+                            }</span>
                           </Badge>
                         </div>
                       </div>
@@ -3866,7 +3883,8 @@ const EmployeeManagement = () => {
         onSuccess={(document) => {
           // Recargar perfil del empleado para ver el documento actualizado
           if (selectedEmployee) {
-            handleViewEmployeeProfile(selectedEmployee);
+            // Forzar recarga de documentos del perfil
+            reloadProfileDocuments();
           }
           toast.success('Documento subido y vinculado exitosamente');
         }}

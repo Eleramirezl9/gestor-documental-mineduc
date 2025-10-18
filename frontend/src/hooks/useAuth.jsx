@@ -13,15 +13,9 @@ export const useAuth = () => {
 }
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    // Intentar cargar usuario desde localStorage para carga inmediata
-    try {
-      const cached = localStorage.getItem('mineduc_user')
-      return cached ? JSON.parse(cached) : null
-    } catch {
-      return null
-    }
-  })
+  // NO cargar usuario desde localStorage al inicio para evitar usar tokens expirados
+  // La sesión se verificará con Supabase directamente
+  const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState(null)
 
@@ -76,6 +70,8 @@ export const AuthProvider = ({ children }) => {
           console.error('❌ Error obteniendo sesión:', error)
           setSession(null)
           setUser(null)
+          // Limpiar localStorage si hay error
+          localStorage.removeItem('mineduc_user')
           setLoading(false)
           return
         }

@@ -78,6 +78,10 @@ const IntuitivNotificationCenter = ({ className = "" }) => {
       const response = await notificationsAPI.getUnreadCount()
       setUnreadCount(response.data.count)
     } catch (error) {
+      // Si es error 401, no logueamos ya que el interceptor manejará la redirección
+      if (error.response?.status === 401) {
+        return
+      }
       console.error('Error cargando conteo de notificaciones:', error)
     }
   }

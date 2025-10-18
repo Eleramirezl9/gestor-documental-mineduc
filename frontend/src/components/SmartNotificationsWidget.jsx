@@ -65,6 +65,10 @@ const SmartNotificationsWidget = ({ onNavigate }) => {
       const response = await documentRequirementsAPI.getPendingDocuments()
       setPendingDocs(response.data || [])
     } catch (error) {
+      // Si es error 401, no logueamos ya que el interceptor manejará la redirección
+      if (error.response?.status === 401) {
+        return
+      }
       console.error('Error cargando documentos pendientes:', error)
     }
   }
@@ -74,6 +78,10 @@ const SmartNotificationsWidget = ({ onNavigate }) => {
       const response = await documentRequirementsAPI.getExpiringDocuments()
       setExpiringDocs(response.data || [])
     } catch (error) {
+      // Si es error 401, no logueamos ya que el interceptor manejará la redirección
+      if (error.response?.status === 401) {
+        return
+      }
       console.error('Error cargando documentos próximos a vencer:', error)
     }
   }
@@ -83,6 +91,10 @@ const SmartNotificationsWidget = ({ onNavigate }) => {
       const response = await notificationsAPI.getAll({ limit: 5, page: 1 })
       setRecentNotifications(response.data.notifications || [])
     } catch (error) {
+      // Si es error 401, no logueamos ya que el interceptor manejará la redirección
+      if (error.response?.status === 401) {
+        return
+      }
       console.error('Error cargando notificaciones recientes:', error)
     }
   }
@@ -90,11 +102,11 @@ const SmartNotificationsWidget = ({ onNavigate }) => {
   const generateSmartAlerts = async () => {
     try {
       const alerts = []
-      
+
       // Generar alertas inteligentes basadas en los datos
       const pendingResponse = await documentRequirementsAPI.getPendingDocuments()
       const expiringResponse = await documentRequirementsAPI.getExpiringDocuments()
-      
+
       const pending = pendingResponse.data || []
       const expiring = expiringResponse.data || []
 
@@ -175,6 +187,10 @@ const SmartNotificationsWidget = ({ onNavigate }) => {
 
       setSmartAlerts(alerts)
     } catch (error) {
+      // Si es error 401, no logueamos ya que el interceptor manejará la redirección
+      if (error.response?.status === 401) {
+        return
+      }
       console.error('Error generando alertas inteligentes:', error)
     }
   }

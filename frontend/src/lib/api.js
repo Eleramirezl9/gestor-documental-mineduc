@@ -64,14 +64,49 @@ api.interceptors.request.use(
   }
 )
 
+// Variable para controlar si ya se está redirigiendo
+let isRedirecting = false
+
 // Interceptor para manejar respuestas y errores
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Solo manejar errores 401 si no estamos ya en proceso de redirección
     if (error.response?.status === 401) {
-      // Token expirado o inválido, cerrar sesión
-      await supabase.auth.signOut()
-      window.location.href = '/login'
+      // Si ya estamos redirigiendo, rechazar silenciosamente
+      if (isRedirecting) {
+        return Promise.reject(error)
+      }
+
+      // Si estamos en la página de login, no hacer nada
+      if (window.location.pathname === '/login') {
+        return Promise.reject(error)
+      }
+
+      // Marcar que estamos redirigiendo
+      isRedirecting = true
+      console.warn('⚠️ Token inválido o expirado, cerrando sesión...')
+
+      // Limpiar todo el almacenamiento
+      try {
+        // Cerrar sesión en Supabase
+        await supabase.auth.signOut()
+
+        // Limpiar localStorage y sessionStorage
+        localStorage.clear()
+        sessionStorage.clear()
+
+        // Esperar un momento para asegurar que se limpia todo
+        await new Promise(resolve => setTimeout(resolve, 100))
+      } catch (err) {
+        console.error('Error al limpiar sesión:', err)
+      }
+
+      // Redirigir a login
+      window.location.replace('/login')
+
+      // Retornar promesa que nunca se resuelve para evitar más procesamiento
+      return new Promise(() => {})
     }
     return Promise.reject(error)
   }

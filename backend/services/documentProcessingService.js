@@ -1,11 +1,13 @@
 const Tesseract = require('tesseract.js');
 const pdf = require('pdf-parse');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const OpenAI = require('openai');
 const crypto = require('crypto');
 const sharp = require('sharp');
 
-// Inicializar Google AI (Gemini)
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
+// Inicializar OpenAI con GPT-5 Nano
+const openai = new OpenAI({
+  apiKey: process.env.GPT5_NANO_API_KEY || process.env.OPENAI_API_KEY,
+});
 
 /**
  * Extrae texto de una imagen usando Tesseract OCR
@@ -37,20 +39,10 @@ async function extractTextFromPDF(buffer) {
 }
 
 /**
- * Clasifica un documento usando Google AI (Gemini)
+ * Clasifica un documento usando OpenAI GPT-5 Nano
  */
 async function classifyDocument(text, fileName) {
   try {
-    // Intentar con diferentes modelos hasta encontrar uno disponible
-    let model;
-    try {
-      // Primero intentar con gemini-pro (modelo estable y disponible)
-      model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-    } catch (e) {
-      console.warn('⚠️  gemini-pro no disponible, intentando con models/gemini-pro');
-      model = genAI.getGenerativeModel({ model: 'models/gemini-pro' });
-    }
-
     const prompt = `Eres un asistente experto en clasificación de documentos del Ministerio de Educación de Guatemala (MINEDUC).
 Analiza el contenido del documento y clasifícalo en una de estas categorías:
 - Contratos y Acuerdos
@@ -85,24 +77,46 @@ Nombre del archivo: ${fileName}
 Contenido:
 ${text.substring(0, 4000)}`;
 
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const textResponse = response.text();
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini', // Modelo económico y rápido de OpenAI
+      messages: [
+        {
+          role: 'system',
+          content: 'Eres un experto en clasificación de documentos gubernamentales. Respondes únicamente en formato JSON válido.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.3, // Baja temperatura para respuestas más consistentes
+      max_tokens: 500,
+      response_format: { type: 'json_object' } // Forzar respuesta JSON
+    });
 
-    // Limpiar la respuesta y extraer solo el JSON
-    let jsonText = textResponse.trim();
+    const responseText = completion.choices[0].message.content;
 
-    // Remover bloques de código markdown si existen
-    jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-
-    // Intentar parsear el JSON
-    const parsed = JSON.parse(jsonText);
+    // Parsear el JSON
+    const parsed = JSON.parse(responseText);
     return parsed;
   } catch (error) {
     console.error('Error classifying document:', error);
     console.warn('⚠️  AI classification failed, continuing without classification');
     return null; // Devolver null en lugar de lanzar error
   }
+}
+
+/**
+ * Limpia el texto eliminando caracteres nulos y otros caracteres problemáticos para PostgreSQL
+ */
+function sanitizeText(text) {
+  if (!text) return '';
+
+  // Eliminar caracteres nulos (\u0000) y otros caracteres de control problemáticos
+  return text
+    .replace(/\u0000/g, '') // Eliminar caracteres nulos
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Eliminar otros caracteres de control
+    .trim();
 }
 
 /**
@@ -163,6 +177,9 @@ async function processDocument(file) {
     } else {
       extractedText = `Archivo: ${originalname}`;
     }
+
+    // Limpiar el texto extraído eliminando caracteres nulos y problemáticos
+    extractedText = sanitizeText(extractedText);
 
     // Clasificar documento usando AI
     let aiClassification = null;
@@ -270,4 +287,5 @@ module.exports = {
   optimizeImage,
   validateFileType,
   getFileExtension,
+  sanitizeText,
 };
