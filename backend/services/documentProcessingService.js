@@ -164,26 +164,33 @@ async function processDocument(file) {
     // Generar hash del archivo
     const fileHash = generateFileHash(buffer);
 
+    // Verificar si el procesamiento de IA está desactivado
+    const aiDisabled = process.env.DISABLE_AI_PROCESSING === 'true';
+
     // Extraer texto según el tipo de archivo
     let extractedText = '';
 
-    if (mimetype === 'application/pdf') {
-      extractedText = await extractTextFromPDF(buffer);
-    } else if (mimetype.startsWith('image/')) {
-      extractedText = await extractTextFromImage(buffer);
-    } else if (mimetype.includes('word') || mimetype.includes('document')) {
-      // Para documentos de Word, por ahora no extraemos texto
-      extractedText = `Documento: ${originalname}`;
-    } else {
-      extractedText = `Archivo: ${originalname}`;
-    }
+    if (!aiDisabled) {
+      if (mimetype === 'application/pdf') {
+        extractedText = await extractTextFromPDF(buffer);
+      } else if (mimetype.startsWith('image/')) {
+        extractedText = await extractTextFromImage(buffer);
+      } else if (mimetype.includes('word') || mimetype.includes('document')) {
+        // Para documentos de Word, por ahora no extraemos texto
+        extractedText = `Documento: ${originalname}`;
+      } else {
+        extractedText = `Archivo: ${originalname}`;
+      }
 
-    // Limpiar el texto extraído eliminando caracteres nulos y problemáticos
-    extractedText = sanitizeText(extractedText);
+      // Limpiar el texto extraído eliminando caracteres nulos y problemáticos
+      extractedText = sanitizeText(extractedText);
+    } else {
+      console.log('⚠️  IA DESACTIVADA - Procesamiento sin OCR ni clasificación');
+    }
 
     // Clasificar documento usando AI
     let aiClassification = null;
-    if (extractedText && extractedText.length > 10) {
+    if (!aiDisabled && extractedText && extractedText.length > 10) {
       aiClassification = await classifyDocument(extractedText, originalname);
     }
 
