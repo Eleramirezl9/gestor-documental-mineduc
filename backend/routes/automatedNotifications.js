@@ -758,6 +758,21 @@ router.post('/generate-email-content', verifyToken, [
     if (daysUntilExpiration <= 3) urgencyLevel = 'urgent';
     else if (daysUntilExpiration <= 7) urgencyLevel = 'high';
 
+    // Generar token del portal (solo para preview)
+    let portalUrl = '';
+    try {
+      const { data: tokenData, error: tokenError } = await supabaseAdmin
+        .rpc('generate_employee_portal_token', {
+          p_employee_id: document.employees.id
+        });
+
+      if (!tokenError && tokenData && tokenData[0]) {
+        portalUrl = tokenData[0].portal_url;
+      }
+    } catch (tokenErr) {
+      console.error('⚠️ Error generando token del portal:', tokenErr);
+    }
+
     // Generar contenido con GPT-5 Nano
     const emailContent = await gpt5NanoService.generateExpirationEmailContent({
       employeeName: `${document.employees.first_name} ${document.employees.last_name}`,
@@ -789,7 +804,11 @@ router.post('/generate-email-content', verifyToken, [
         days_until_expiration: daysUntilExpiration,
         urgency_level: urgencyLevel
       },
-      email: emailContent
+      email: emailContent,
+      portal: portalUrl ? {
+        url: portalUrl,
+        note: 'Este enlace se incluirá en el email para que el empleado pueda subir documentos'
+      } : null
     });
   } catch (error) {
     console.error('Error generando contenido de email:', error);
@@ -875,6 +894,23 @@ router.post('/send-renewal-email', verifyToken, [
     if (daysUntilExpiration <= 3) urgencyLevel = 'urgent';
     else if (daysUntilExpiration <= 7) urgencyLevel = 'high';
 
+    // Generar token del portal del empleado
+    let portalUrl = '';
+    try {
+      const { data: tokenData, error: tokenError } = await supabaseAdmin
+        .rpc('generate_employee_portal_token', {
+          p_employee_id: document.employees.id
+        });
+
+      if (!tokenError && tokenData && tokenData[0]) {
+        portalUrl = tokenData[0].portal_url;
+        console.log('✅ Token de portal generado para:', document.employees.email);
+      }
+    } catch (tokenErr) {
+      console.error('⚠️ Error generando token del portal:', tokenErr);
+      // Continuar sin el portal URL si hay error
+    }
+
     // Generar o usar contenido personalizado
     let emailContent;
     if (customContent && customContent.subject && customContent.body) {
@@ -902,7 +938,23 @@ router.post('/send-renewal-email', verifyToken, [
       htmlContent: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
-            <h1 style="color: white; margin: 0;">MINEDUC - Gestión Documental</h1>
+            <h1 style="color: white; margin: 0 0 15px 0;">MINEDUC - Gestión Documental</h1>
+            ${portalUrl ? `
+              <div style="margin-top: 15px; background-color: rgba(255, 255, 255, 0.15); padding: 15px; border-radius: 8px; backdrop-filter: blur(10px);">
+                <p style="color: #e0e7ff; margin: 0 0 10px 0; font-size: 14px; font-weight: 500;">
+                  🔗 Portal del Empleado
+                </p>
+                <a href="${portalUrl}"
+                   style="display: inline-block; background-color: white; color: #667eea;
+                          padding: 12px 30px; text-decoration: none; border-radius: 6px;
+                          font-weight: 600; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                  📄 Ver y Subir Documentos
+                </a>
+                <p style="color: #ddd6fe; margin: 10px 0 0 0; font-size: 12px;">
+                  Acceda a su portal personalizado para gestionar sus documentos
+                </p>
+              </div>
+            ` : ''}
           </div>
           <div style="padding: 30px; background-color: #f9fafb;">
             <div style="white-space: pre-wrap; line-height: 1.6; color: #374151;">
@@ -914,6 +966,19 @@ router.post('/send-renewal-email', verifyToken, [
               <p><strong>Fecha de vencimiento:</strong> ${expirationDate.toLocaleDateString('es-GT')}</p>
               <p><strong>Días restantes:</strong> ${daysUntilExpiration} día${daysUntilExpiration !== 1 ? 's' : ''}</p>
             </div>
+            ${portalUrl ? `
+              <div style="margin-top: 25px; padding: 20px; background-color: #eff6ff; border-radius: 8px; border: 2px solid #dbeafe;">
+                <h3 style="margin-top: 0; color: #1e40af; font-size: 16px;">💡 ¿Cómo subir el documento?</h3>
+                <ol style="margin: 10px 0; padding-left: 20px; color: #1e3a8a; line-height: 1.8;">
+                  <li>Haga clic en el botón "Ver y Subir Documentos" arriba</li>
+                  <li>Seleccione el archivo desde su computadora</li>
+                  <li>El sistema automáticamente notificará al administrador</li>
+                </ol>
+                <p style="margin: 15px 0 0 0; padding: 12px; background-color: white; border-radius: 4px; font-size: 13px; color: #374151;">
+                  <strong>🔒 Seguro:</strong> Su enlace es personal y solo usted puede acceder a sus documentos
+                </p>
+              </div>
+            ` : ''}
           </div>
           <div style="padding: 20px; text-align: center; color: #6b7280; font-size: 12px;">
             <p>Este es un mensaje automático del Sistema de Gestión Documental del MINEDUC</p>
@@ -937,7 +1002,8 @@ router.post('/send-renewal-email', verifyToken, [
           days_until_expiration: daysUntilExpiration,
           urgency_level: urgencyLevel,
           ai_generated: emailContent.success,
-          email_id: emailResult.id
+          email_id: emailResult.id,
+          portal_url_included: !!portalUrl
         },
         sent_at: new Date().toISOString()
       });
@@ -948,8 +1014,13 @@ router.post('/send-renewal-email', verifyToken, [
       email: {
         to: document.employees.email,
         subject: emailContent.subject,
-        aiGenerated: emailContent.success
+        aiGenerated: emailContent.success,
+        portalUrlIncluded: !!portalUrl
       },
+      portal: portalUrl ? {
+        url: portalUrl,
+        message: 'Portal URL incluido en el email para que el empleado pueda subir documentos'
+      } : null,
       emailResult
     });
   } catch (error) {

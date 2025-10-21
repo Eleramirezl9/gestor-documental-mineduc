@@ -824,10 +824,48 @@ router.post('/assign',
 
       if (error) throw error;
 
+      // Generar token de portal para el empleado
+      try {
+        const { data: tokenData, error: tokenError } = await supabaseAdmin
+          .rpc('generate_employee_portal_token', {
+            p_employee_id: employee.id
+          });
+
+        if (tokenError) throw tokenError;
+
+        // Obtener info completa del empleado para el email
+        const { data: employeeData, error: empError } = await supabaseAdmin
+          .from('employees')
+          .select('first_name, last_name, email, employee_id')
+          .eq('id', employee.id)
+          .single();
+
+        if (empError) throw empError;
+
+        // Enviar email con enlace del portal
+        const emailService = require('../services/emailService');
+        await emailService.sendEmployeePortalLink({
+          employeeEmail: employeeData.email,
+          employeeName: `${employeeData.first_name} ${employeeData.last_name}`,
+          portalUrl: tokenData[0].portal_url,
+          requestedDocuments: documents.map(doc => ({
+            document_type: idToName[doc.document_type_id] || 'Documento',
+            priority: doc.priority,
+            notes: doc.notes
+          })),
+          dueDate: documents[0]?.due_date // Usar la fecha del primer documento como referencia
+        });
+
+        console.log(`📧 Email de portal enviado a ${employeeData.email}`);
+      } catch (emailError) {
+        console.error('❌ Error enviando email de portal:', emailError);
+        // No fallar la solicitud si el email falla
+      }
+
       res.status(201).json({
         success: true,
         data,
-        message: `${data.length} documento(s) asignado(s) correctamente`
+        message: `${data.length} documento(s) asignado(s) correctamente. Se ha enviado un email al empleado con el enlace al portal.`
       });
     } catch (error) {
       console.error('Error asignando documentos:', error);
@@ -887,33 +925,53 @@ router.get('/employee/:employee_id', verifyToken, async (req, res) => {
 
         console.log(`🔍 Buscando documento para requirement ${req.id}, tipo: ${req.document_type}, document_id: ${req.document_id}`);
 
-        // Si el requirement tiene document_id, buscar directamente por ID
-        if (req.document_id) {
-          const { data: doc } = await supabaseAdmin
-            .from('documents')
-            .select('id, file_path, file_name, file_size, mime_type, created_at, title')
-            .eq('id', req.document_id)
-            .maybeSingle();
+        // PRIMERO: Buscar en employee_documents (documentos subidos por empleado o admin)
+        const { data: empDoc, error: empDocError } = await supabaseAdmin
+          .from('employee_documents')
+          .select('id, file_path, file_name, file_size, mime_type, upload_date, requirement_id')
+          .eq('requirement_id', req.id)
+          .order('upload_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-          uploadedDoc = doc;
-          console.log(`📄 Documento encontrado por ID:`, uploadedDoc ? 'SÍ' : 'NO');
+        if (empDocError) {
+          console.error(`❌ Error buscando en employee_documents:`, empDocError);
+        }
+
+        if (empDoc) {
+          uploadedDoc = empDoc;
+          console.log(`📄 Documento encontrado en employee_documents:`, uploadedDoc.file_name, 'Path:', uploadedDoc.file_path);
         } else {
-          // Si no tiene document_id, buscar por tags (fallback para documentos antiguos)
-          // Buscar documentos que tengan ambos tags
-          const { data: docs } = await supabaseAdmin
-            .from('documents')
-            .select('id, file_path, file_name, file_size, mime_type, created_at, title, tags')
-            .order('created_at', { ascending: false })
-            .limit(100); // Limitar a los últimos 100 documentos para mejorar performance
+          console.log(`❌ No se encontró documento en employee_documents para requirement_id: ${req.id}`);
 
-          // Filtrar manualmente por tags que contengan el empleado y tipo
-          const matchingDoc = docs?.find(d =>
-            Array.isArray(d.tags) &&
-            d.tags.some(tag => tag === `empleado:${employee.id}`) &&
-            d.tags.some(tag => tag === `tipo:${req.document_type}`)
-          );
+          // SEGUNDO: Si no hay en employee_documents, buscar en documents (sistema antiguo)
+          if (req.document_id) {
+            const { data: doc } = await supabaseAdmin
+              .from('documents')
+              .select('id, file_path, file_name, file_size, mime_type, created_at, title')
+              .eq('id', req.document_id)
+              .maybeSingle();
 
-          uploadedDoc = matchingDoc;
+            uploadedDoc = doc;
+            console.log(`📄 Documento encontrado en documents por ID:`, uploadedDoc ? 'SÍ' : 'NO');
+          } else {
+            // Si no tiene document_id, buscar por tags (fallback para documentos antiguos)
+            // Buscar documentos que tengan ambos tags
+            const { data: docs } = await supabaseAdmin
+              .from('documents')
+              .select('id, file_path, file_name, file_size, mime_type, created_at, title, tags')
+              .order('created_at', { ascending: false })
+              .limit(100); // Limitar a los últimos 100 documentos para mejorar performance
+
+            // Filtrar manualmente por tags que contengan el empleado y tipo
+            const matchingDoc = docs?.find(d =>
+              Array.isArray(d.tags) &&
+              d.tags.some(tag => tag === `empleado:${employee.id}`) &&
+              d.tags.some(tag => tag === `tipo:${req.document_type}`)
+            );
+
+            uploadedDoc = matchingDoc;
+          }
         }
 
         // Si hay documento subido, obtener URL pública
@@ -947,7 +1005,7 @@ router.get('/employee/:employee_id', verifyToken, async (req, res) => {
             fileName: uploadedDoc.file_name,
             fileSize: uploadedDoc.file_size,
             mimeType: uploadedDoc.mime_type,
-            uploadedAt: uploadedDoc.created_at
+            uploadedAt: uploadedDoc.upload_date || uploadedDoc.created_at
           } : null
         };
       })
@@ -1152,10 +1210,24 @@ router.post('/upload',
       const { employee_id, requirement_id, document_type_id } = req.body;
       const file = req.file;
 
-      // Generar nombre único para el archivo
-      const timestamp = Date.now();
-      const fileName = `${employee_id}_${document_type_id}_${timestamp}${path.extname(file.originalname)}`;
-      const filePath = `employees/${employee_id}/documents/${fileName}`;
+      // Buscar UUID del empleado para construir ruta correcta
+      const { data: empData, error: empLookupError } = await supabaseAdmin
+        .from('employees')
+        .select('id, employee_id')
+        .eq('employee_id', employee_id)
+        .single();
+
+      if (empLookupError) {
+        console.error('Error buscando empleado:', empLookupError);
+        throw new Error('Empleado no encontrado');
+      }
+
+      // Generar nombre único para el archivo usando formato: empleados/{code}_{uuid}/{fileUUID}.ext
+      const { v4: uuidv4 } = require('uuid');
+      const fileExt = path.extname(file.originalname).substring(1); // Remove leading dot
+      const uniqueFileName = `${uuidv4()}.${fileExt}`;
+      const folderIdentifier = `${empData.employee_id}_${empData.id}`;
+      const filePath = `empleados/${folderIdentifier}/${uniqueFileName}`;
 
       // Subir archivo a Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
