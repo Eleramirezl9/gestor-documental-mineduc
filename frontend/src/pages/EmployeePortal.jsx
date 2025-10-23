@@ -273,7 +273,7 @@ export default function EmployeePortal() {
                   <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
                     <span className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
-                      Fecha límite: {new Date(request.due_date).toLocaleDateString('es-ES')}
+                      Fecha límite: {request.required_date ? new Date(request.required_date).toLocaleDateString('es-ES') : 'No especificada'}
                     </span>
                   </div>
 

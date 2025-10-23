@@ -87,14 +87,14 @@ class EmailService {
   }
 
   async sendEmail({ to, subject, htmlContent, textContent, category = 'general' }) {
-    // Detectar si el destinatario es diferente al email registrado en Resend
-    const resendRegisteredEmail = 'eramirezl9@miumg.edu.gt'; // Tu email de Resend
     const recipientEmail = Array.isArray(to) ? to[0] : to;
-    const isDifferentRecipient = recipientEmail !== resendRegisteredEmail;
 
-    // Si es un destinatario diferente y Gmail está disponible, usar Gmail directamente
-    if (isDifferentRecipient && this.fallbackEnabled) {
-      console.log('📧 Destinatario diferente detectado. Usando Gmail directamente para:', recipientEmail);
+    // IMPORTANTE: Resend con dominio onboarding@resend.dev solo envía al email verificado
+    // Por defecto usamos Gmail para TODOS los emails hasta que se configure un dominio verificado
+    const useGmailByDefault = true; // Cambiar a false cuando tengas dominio verificado en Resend
+
+    if (useGmailByDefault && this.fallbackEnabled) {
+      console.log('📧 Usando Gmail como proveedor principal para:', recipientEmail);
 
       try {
         const gmailResult = await this.gmailTransporter.sendMail({
@@ -118,15 +118,27 @@ class EmailService {
         return { success: true, provider: 'gmail', id: gmailResult.messageId };
       } catch (gmailError) {
         console.error('❌ Error enviando con Gmail:', gmailError.message);
-        throw new Error(`Error enviando email: ${gmailError.message}`);
+        console.error('📋 Detalles completos:', gmailError);
+
+        await this.logEmailSent({
+          to,
+          subject,
+          provider: 'gmail',
+          status: 'failed',
+          error: gmailError.message,
+          category
+        });
+
+        throw new Error(`Error enviando email con Gmail: ${gmailError.message}`);
       }
     }
 
-    // Si es el mismo destinatario de Resend o no hay Gmail, usar Resend
+    // Código de Resend (solo se ejecuta si useGmailByDefault = false)
     try {
       const fromEmail = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
       console.log('📧 Intentando enviar email con Resend desde:', fromEmail);
+      console.log('⚠️ NOTA: onboarding@resend.dev solo puede enviar a emails verificados en tu cuenta');
 
       const result = await this.resend.emails.send({
         from: fromEmail,
@@ -154,12 +166,6 @@ class EmailService {
       // Intentar con Gmail si está disponible
       if (this.fallbackEnabled) {
         console.log('🔄 Intentando con Gmail como fallback...');
-        console.log('📧 Gmail configurado:', {
-          host: process.env.EMAIL_HOST,
-          port: process.env.EMAIL_PORT,
-          user: process.env.GMAIL_USER ? '✓ Configurado' : '✗ Falta',
-          pass: process.env.GMAIL_APP_PASSWORD ? '✓ Configurado' : '✗ Falta'
-        });
 
         try {
           const fallbackResult = await this.gmailTransporter.sendMail({
@@ -183,7 +189,6 @@ class EmailService {
           return { success: true, provider: 'gmail', id: fallbackResult.messageId, fallback: true };
         } catch (fallbackError) {
           console.error('❌ Error enviando email con Gmail:', fallbackError.message);
-          console.log('🔍 Detalles del error de Gmail:', fallbackError);
 
           await this.logEmailSent({
             to,
@@ -196,8 +201,6 @@ class EmailService {
 
           throw new Error(`Ambos proveedores fallaron. Resend: ${error.message} | Gmail: ${fallbackError.message}`);
         }
-      } else {
-        console.log('⚠️ Fallback a Gmail no está habilitado. Verifica la configuración de Gmail en .env');
       }
 
       await this.logEmailSent({
