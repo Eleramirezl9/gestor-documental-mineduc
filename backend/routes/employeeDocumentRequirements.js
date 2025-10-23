@@ -824,48 +824,13 @@ router.post('/assign',
 
       if (error) throw error;
 
-      // Generar token de portal para el empleado
-      try {
-        const { data: tokenData, error: tokenError } = await supabaseAdmin
-          .rpc('generate_employee_portal_token', {
-            p_employee_id: employee.id
-          });
-
-        if (tokenError) throw tokenError;
-
-        // Obtener info completa del empleado para el email
-        const { data: employeeData, error: empError } = await supabaseAdmin
-          .from('employees')
-          .select('first_name, last_name, email, employee_id')
-          .eq('id', employee.id)
-          .single();
-
-        if (empError) throw empError;
-
-        // Enviar email con enlace del portal
-        const emailService = require('../services/emailService');
-        await emailService.sendEmployeePortalLink({
-          employeeEmail: employeeData.email,
-          employeeName: `${employeeData.first_name} ${employeeData.last_name}`,
-          portalUrl: tokenData[0].portal_url,
-          requestedDocuments: documents.map(doc => ({
-            document_type: idToName[doc.document_type_id] || 'Documento',
-            priority: doc.priority,
-            notes: doc.notes
-          })),
-          dueDate: documents[0]?.due_date // Usar la fecha del primer documento como referencia
-        });
-
-        console.log(`📧 Email de portal enviado a ${employeeData.email}`);
-      } catch (emailError) {
-        console.error('❌ Error enviando email de portal:', emailError);
-        // No fallar la solicitud si el email falla
-      }
+      // Email desactivado al asignar documentos (se envía manualmente después si es necesario)
+      console.log('📋 Documentos asignados sin enviar email automático');
 
       res.status(201).json({
         success: true,
         data,
-        message: `${data.length} documento(s) asignado(s) correctamente. Se ha enviado un email al empleado con el enlace al portal.`
+        message: `${data.length} documento(s) asignado(s) correctamente.`
       });
     } catch (error) {
       console.error('Error asignando documentos:', error);
