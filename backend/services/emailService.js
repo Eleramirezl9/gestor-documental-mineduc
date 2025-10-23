@@ -89,9 +89,10 @@ class EmailService {
   async sendEmail({ to, subject, htmlContent, textContent, category = 'general' }) {
     const recipientEmail = Array.isArray(to) ? to[0] : to;
 
-    // IMPORTANTE: Resend con dominio onboarding@resend.dev solo envía al email verificado
-    // Por defecto usamos Gmail para TODOS los emails hasta que se configure un dominio verificado
-    const useGmailByDefault = true; // Cambiar a false cuando tengas dominio verificado en Resend
+    // IMPORTANTE: En producción (Render), SMTP está bloqueado, usar Resend
+    // Gmail solo funciona en desarrollo local
+    const isProduction = process.env.NODE_ENV === 'production';
+    const useGmailByDefault = !isProduction && this.fallbackEnabled;
 
     if (useGmailByDefault && this.fallbackEnabled) {
       console.log('📧 Usando Gmail como proveedor principal para:', recipientEmail);
@@ -133,12 +134,18 @@ class EmailService {
       }
     }
 
-    // Código de Resend (solo se ejecuta si useGmailByDefault = false)
+    // Usar Resend en producción (Gmail está bloqueado en Render)
     try {
       const fromEmail = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM || 'onboarding@resend.dev';
+      const verifiedEmail = process.env.RESEND_VERIFIED_EMAIL || 'eramirezl9@miumg.edu.gt';
 
-      console.log('📧 Intentando enviar email con Resend desde:', fromEmail);
-      console.log('⚠️ NOTA: onboarding@resend.dev solo puede enviar a emails verificados en tu cuenta');
+      console.log('📧 Enviando con Resend desde:', fromEmail);
+
+      // Solo advertir si el destinatario no es el email verificado
+      if (recipientEmail !== verifiedEmail && fromEmail.includes('onboarding@resend.dev')) {
+        console.warn(`⚠️ Resend sandbox solo puede enviar a ${verifiedEmail}. Email a ${recipientEmail} puede no llegar.`);
+        console.warn('💡 Solución: Verifica un dominio en https://resend.com/domains');
+      }
 
       const result = await this.resend.emails.send({
         from: fromEmail,
