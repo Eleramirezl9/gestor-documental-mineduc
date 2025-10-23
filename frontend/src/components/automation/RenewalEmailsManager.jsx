@@ -163,10 +163,11 @@ export default function RenewalEmailsManager() {
       setSending(true);
 
       // Aumentar timeout para envío de email (generación IA + envío puede tardar)
+      // En producción puede tardar hasta 2 minutos por Gmail + generación IA
       const response = await api.post('/automated-notifications/send-renewal-email', {
         documentId
       }, {
-        timeout: 60000 // 60 segundos
+        timeout: 120000 // 120 segundos (2 minutos)
       });
 
       if (response.data.success) {

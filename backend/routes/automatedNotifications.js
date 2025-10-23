@@ -911,28 +911,41 @@ router.post('/send-renewal-email', verifyToken, [
       // Continuar sin el portal URL si hay error
     }
 
-    // Generar o usar contenido personalizado
-    let emailContent;
-    if (customContent && customContent.subject && customContent.body) {
-      emailContent = {
-        success: true,
-        subject: customContent.subject,
-        body: customContent.body,
-        metadata: { custom: true }
-      };
-    } else {
-      emailContent = await gpt5NanoService.generateExpirationEmailContent({
-        employeeName: `${document.employees.first_name} ${document.employees.last_name}`,
-        employeeCode: document.employees.employee_id,
-        documentType: document.document_type || 'Documento',
-        daysUntilExpiration,
-        expirationDate: expirationDate.toLocaleDateString('es-GT'),
-        urgencyLevel
-      });
-    }
+    // Responder inmediatamente al cliente para evitar timeouts
+    res.json({
+      success: true,
+      message: 'El email se está enviando en segundo plano',
+      email: {
+        to: document.employees.email,
+        status: 'sending'
+      }
+    });
 
-    // Enviar email con Resend
-    const emailResult = await emailService.sendEmail({
+    // Enviar email en segundo plano (sin await para no bloquear)
+    (async () => {
+      try {
+        // Generar o usar contenido personalizado
+        let emailContent;
+        if (customContent && customContent.subject && customContent.body) {
+          emailContent = {
+            success: true,
+            subject: customContent.subject,
+            body: customContent.body,
+            metadata: { custom: true }
+          };
+        } else {
+          emailContent = await gpt5NanoService.generateExpirationEmailContent({
+            employeeName: `${document.employees.first_name} ${document.employees.last_name}`,
+            employeeCode: document.employees.employee_id,
+            documentType: document.document_type || 'Documento',
+            daysUntilExpiration,
+            expirationDate: expirationDate.toLocaleDateString('es-GT'),
+            urgencyLevel
+          });
+        }
+
+        // Enviar email
+        const emailResult = await emailService.sendEmail({
       to: document.employees.email,
       subject: emailContent.subject,
       htmlContent: `
@@ -988,44 +1001,51 @@ router.post('/send-renewal-email', verifyToken, [
       `
     });
 
-    // Registrar el envío en la base de datos
-    await supabase
-      .from('email_logs')
-      .insert({
-        recipient: document.employees.email,
-        subject: emailContent.subject,
-        type: 'document_expiration',
-        status: emailResult.success ? 'sent' : 'failed',
-        metadata: {
-          document_id: documentId,
-          employee_id: document.employee_id,
-          days_until_expiration: daysUntilExpiration,
-          urgency_level: urgencyLevel,
-          ai_generated: emailContent.success,
-          email_id: emailResult.id,
-          portal_url_included: !!portalUrl
-        },
-        sent_at: new Date().toISOString()
-      });
+        // Registrar el envío en la base de datos
+        await supabase
+          .from('email_logs')
+          .insert({
+            recipient: document.employees.email,
+            subject: emailContent.subject,
+            type: 'document_expiration',
+            status: emailResult.success ? 'sent' : 'failed',
+            metadata: {
+              document_id: documentId,
+              employee_id: document.employee_id,
+              days_until_expiration: daysUntilExpiration,
+              urgency_level: urgencyLevel,
+              ai_generated: emailContent.success,
+              email_id: emailResult.id,
+              portal_url_included: !!portalUrl
+            },
+            sent_at: new Date().toISOString()
+          });
 
-    res.json({
-      success: true,
-      message: 'Email enviado exitosamente',
-      email: {
-        to: document.employees.email,
-        subject: emailContent.subject,
-        aiGenerated: emailContent.success,
-        portalUrlIncluded: !!portalUrl
-      },
-      portal: portalUrl ? {
-        url: portalUrl,
-        message: 'Portal URL incluido en el email para que el empleado pueda subir documentos'
-      } : null,
-      emailResult
-    });
+        console.log(`✅ Email de renovación enviado exitosamente en segundo plano a ${document.employees.email}`);
+      } catch (bgError) {
+        console.error('❌ Error enviando email en segundo plano:', bgError);
+
+        // Registrar error en la BD
+        await supabase
+          .from('email_logs')
+          .insert({
+            recipient: document.employees.email,
+            subject: 'Error al enviar',
+            type: 'document_expiration',
+            status: 'failed',
+            metadata: {
+              document_id: documentId,
+              error: bgError.message
+            },
+            sent_at: new Date().toISOString()
+          });
+      }
+    })();
   } catch (error) {
-    console.error('Error enviando email de renovación:', error);
-    res.status(500).json({ error: 'Error interno del servidor', details: error.message });
+    console.error('Error en send-renewal-email:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Error interno del servidor', details: error.message });
+    }
   }
 });
 
