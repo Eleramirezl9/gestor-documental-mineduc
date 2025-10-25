@@ -137,9 +137,12 @@ export default function RenewalEmailsManager() {
       setLoadingPreview(true);
       setPreviewOpen(true);
 
+      // Aumentar timeout para generación de contenido con IA
       const response = await api.post('/automated-notifications/generate-email-content', {
         documentId,
         preview: true
+      }, {
+        timeout: 30000 // 30 segundos
       });
 
       if (response.data.success) {
@@ -159,18 +162,28 @@ export default function RenewalEmailsManager() {
     try {
       setSending(true);
 
+      // Aumentar timeout para envío de email (generación IA + envío puede tardar)
+      // En producción puede tardar hasta 2 minutos por Gmail + generación IA
       const response = await api.post('/automated-notifications/send-renewal-email', {
         documentId
+      }, {
+        timeout: 120000 // 120 segundos (2 minutos)
       });
 
       if (response.data.success) {
         toast.success(`Email enviado a ${response.data.email.to}`);
         // Remover de selección
         setSelectedDocuments(prev => prev.filter(id => id !== documentId));
+        // Recargar lista de documentos
+        loadDocuments();
       }
     } catch (error) {
       console.error('Error enviando email:', error);
-      toast.error('Error al enviar email');
+      if (error.code === 'ECONNABORTED') {
+        toast.error('El envío está tardando más de lo esperado. El email puede haberse enviado correctamente.');
+      } else {
+        toast.error('Error al enviar email');
+      }
     } finally {
       setSending(false);
     }

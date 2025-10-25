@@ -293,6 +293,7 @@ app.use("/api/employee-document-requirements", require("./routes/employeeDocumen
 app.use("/api/reports", require("./routes/reports"));
 app.use("/api/audit", require("./routes/audit"));
 app.use("/api/settings", require("./routes/settings"));
+app.use("/api/employee-portal", require("./routes/employeePortal"));
 
 /**
  * @swagger

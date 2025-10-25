@@ -87,14 +87,15 @@ class EmailService {
   }
 
   async sendEmail({ to, subject, htmlContent, textContent, category = 'general' }) {
-    // Detectar si el destinatario es diferente al email registrado en Resend
-    const resendRegisteredEmail = 'eramirezl9@miumg.edu.gt'; // Tu email de Resend
     const recipientEmail = Array.isArray(to) ? to[0] : to;
-    const isDifferentRecipient = recipientEmail !== resendRegisteredEmail;
 
-    // Si es un destinatario diferente y Gmail está disponible, usar Gmail directamente
-    if (isDifferentRecipient && this.fallbackEnabled) {
-      console.log('📧 Destinatario diferente detectado. Usando Gmail directamente para:', recipientEmail);
+    // IMPORTANTE: En producción (Render), SMTP está bloqueado, usar Resend
+    // Gmail solo funciona en desarrollo local
+    const isProduction = process.env.NODE_ENV === 'production';
+    const useGmailByDefault = !isProduction && this.fallbackEnabled;
+
+    if (useGmailByDefault && this.fallbackEnabled) {
+      console.log('📧 Usando Gmail como proveedor principal para:', recipientEmail);
 
       try {
         const gmailResult = await this.gmailTransporter.sendMail({
@@ -118,15 +119,33 @@ class EmailService {
         return { success: true, provider: 'gmail', id: gmailResult.messageId };
       } catch (gmailError) {
         console.error('❌ Error enviando con Gmail:', gmailError.message);
-        throw new Error(`Error enviando email: ${gmailError.message}`);
+        console.error('📋 Detalles completos:', gmailError);
+
+        await this.logEmailSent({
+          to,
+          subject,
+          provider: 'gmail',
+          status: 'failed',
+          error: gmailError.message,
+          category
+        });
+
+        throw new Error(`Error enviando email con Gmail: ${gmailError.message}`);
       }
     }
 
-    // Si es el mismo destinatario de Resend o no hay Gmail, usar Resend
+    // Usar Resend en producción (Gmail está bloqueado en Render)
     try {
       const fromEmail = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM || 'onboarding@resend.dev';
+      const verifiedEmail = process.env.RESEND_VERIFIED_EMAIL || 'eramirezl9@miumg.edu.gt';
 
-      console.log('📧 Intentando enviar email con Resend desde:', fromEmail);
+      console.log('📧 Enviando con Resend desde:', fromEmail);
+
+      // Solo advertir si el destinatario no es el email verificado
+      if (recipientEmail !== verifiedEmail && fromEmail.includes('onboarding@resend.dev')) {
+        console.warn(`⚠️ Resend sandbox solo puede enviar a ${verifiedEmail}. Email a ${recipientEmail} puede no llegar.`);
+        console.warn('💡 Solución: Verifica un dominio en https://resend.com/domains');
+      }
 
       const result = await this.resend.emails.send({
         from: fromEmail,
@@ -154,12 +173,6 @@ class EmailService {
       // Intentar con Gmail si está disponible
       if (this.fallbackEnabled) {
         console.log('🔄 Intentando con Gmail como fallback...');
-        console.log('📧 Gmail configurado:', {
-          host: process.env.EMAIL_HOST,
-          port: process.env.EMAIL_PORT,
-          user: process.env.GMAIL_USER ? '✓ Configurado' : '✗ Falta',
-          pass: process.env.GMAIL_APP_PASSWORD ? '✓ Configurado' : '✗ Falta'
-        });
 
         try {
           const fallbackResult = await this.gmailTransporter.sendMail({
@@ -183,7 +196,6 @@ class EmailService {
           return { success: true, provider: 'gmail', id: fallbackResult.messageId, fallback: true };
         } catch (fallbackError) {
           console.error('❌ Error enviando email con Gmail:', fallbackError.message);
-          console.log('🔍 Detalles del error de Gmail:', fallbackError);
 
           await this.logEmailSent({
             to,
@@ -196,8 +208,6 @@ class EmailService {
 
           throw new Error(`Ambos proveedores fallaron. Resend: ${error.message} | Gmail: ${fallbackError.message}`);
         }
-      } else {
-        console.log('⚠️ Fallback a Gmail no está habilitado. Verifica la configuración de Gmail en .env');
       }
 
       await this.logEmailSent({
@@ -746,6 +756,197 @@ Este es un mensaje automático. Por favor, no responda a este correo.
       return result;
     } catch (error) {
       console.error(`❌ Error enviando email de bienvenida a ${employeeEmail}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Envía email con enlace del portal del empleado para subir documentos
+   */
+  async sendEmployeePortalLink({
+    employeeEmail,
+    employeeName,
+    portalUrl,
+    requestedDocuments = [],
+    dueDate
+  }) {
+    const subject = 'Documentos Solicitados - Portal del Empleado MINEDUC';
+
+    const documentList = requestedDocuments.map(doc =>
+      `<li style="margin-bottom: 8px;">
+        <strong>${doc.document_type}</strong>
+        ${doc.priority ? ` - <span style="color: ${doc.priority === 'urgente' ? '#dc2626' : doc.priority === 'alta' ? '#ea580c' : '#059669'}; font-weight: 500;">${doc.priority.toUpperCase()}</span>` : ''}
+        ${doc.notes ? `<br><span style="font-size: 13px; color: #6b7280;">${doc.notes}</span>` : ''}
+      </li>`
+    ).join('');
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentos Solicitados</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f3f4f6;">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" style="max-width: 600px; width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 30px; text-align: center;">
+                            <h1 style="margin: 0; color: white; font-size: 24px; font-weight: 600;">
+                                📄 Documentos Solicitados
+                            </h1>
+                            <p style="margin: 10px 0 0 0; color: #dbeafe; font-size: 14px;">
+                                Ministerio de Educación - Guatemala
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <p style="margin: 0 0 20px 0; font-size: 16px; color: #111827; line-height: 1.6;">
+                                Estimado/a <strong>${employeeName}</strong>,
+                            </p>
+
+                            <p style="margin: 0 0 25px 0; font-size: 15px; color: #374151; line-height: 1.7;">
+                                Se han solicitado los siguientes documentos para completar su expediente:
+                            </p>
+
+                            <ul style="margin: 0 0 30px 0; padding-left: 20px; font-size: 14px; color: #374151; line-height: 1.8;">
+                                ${documentList}
+                            </ul>
+
+                            ${dueDate ? `
+                            <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin-bottom: 25px; border-radius: 4px;">
+                                <p style="margin: 0; font-size: 14px; color: #92400e;">
+                                    <strong>📅 Fecha límite:</strong> ${new Date(dueDate).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                </p>
+                            </div>
+                            ` : ''}
+
+                            <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 20px; margin-bottom: 30px; border-radius: 4px;">
+                                <p style="margin: 0 0 10px 0; font-size: 14px; color: #1e40af; font-weight: 600;">
+                                    🔗 Acceda a su portal personalizado:
+                                </p>
+                                <p style="margin: 0 0 15px 0; font-size: 13px; color: #1e3a8a; line-height: 1.6;">
+                                    Haga clic en el botón de abajo para acceder a su portal donde podrá:
+                                </p>
+                                <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #1e3a8a;">
+                                    <li>Ver los documentos solicitados</li>
+                                    <li>Subir sus documentos de forma segura</li>
+                                    <li>Consultar el estado de sus envíos</li>
+                                    <li>Enviar mensajes al administrador</li>
+                                </ul>
+                            </div>
+
+                            <!-- CTA Button -->
+                            <table role="presentation" style="width: 100%; margin: 30px 0;">
+                                <tr>
+                                    <td align="center">
+                                        <a href="${portalUrl}"
+                                           style="display: inline-block; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+                                                  color: white; text-decoration: none; padding: 16px 40px;
+                                                  border-radius: 8px; font-weight: 600; font-size: 15px;
+                                                  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                                            🚀 Acceder a Mi Portal
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 15px; border-radius: 6px; margin-top: 25px;">
+                                <p style="margin: 0 0 8px 0; font-size: 13px; color: #374151; font-weight: 600;">
+                                    🔒 Información Importante:
+                                </p>
+                                <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: #6b7280; line-height: 1.7;">
+                                    <li>Este enlace es personal e intransferible</li>
+                                    <li>Válido por 30 días desde su emisión</li>
+                                    <li>Solo usted puede acceder a sus documentos</li>
+                                    <li>Los archivos deben ser PDF, JPG, PNG, DOC o DOCX (máx. 10MB)</li>
+                                </ul>
+                            </div>
+
+                            <p style="margin: 25px 0 0 0; font-size: 13px; color: #6b7280; line-height: 1.7;">
+                                Si tiene alguna pregunta o problema para acceder al portal, puede enviar un mensaje
+                                directamente desde el portal o contactar al departamento de recursos humanos.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background: #f9fafb; padding: 25px; text-align: center; border-top: 1px solid #e5e7eb;">
+                            <p style="margin: 0 0 8px 0; font-size: 12px; color: #6b7280;">
+                                Este es un mensaje automático del Sistema de Gestión Documental del MINEDUC.<br>
+                                Por favor, no responda a este correo.
+                            </p>
+                            <p style="margin: 0; font-size: 11px; color: #9ca3af;">
+                                © ${new Date().getFullYear()} Ministerio de Educación - Guatemala
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+    `;
+
+    const documentListText = requestedDocuments.map(doc =>
+      `- ${doc.document_type}${doc.priority ? ` (${doc.priority.toUpperCase()})` : ''}${doc.notes ? `\n  ${doc.notes}` : ''}`
+    ).join('\n');
+
+    const textContent = `
+DOCUMENTOS SOLICITADOS
+
+Estimado/a ${employeeName},
+
+Se han solicitado los siguientes documentos para completar su expediente:
+
+${documentListText}
+
+${dueDate ? `Fecha límite: ${new Date(dueDate).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}` : ''}
+
+ACCEDA A SU PORTAL PERSONALIZADO:
+${portalUrl}
+
+En su portal podrá:
+- Ver los documentos solicitados
+- Subir sus documentos de forma segura
+- Consultar el estado de sus envíos
+- Enviar mensajes al administrador
+
+INFORMACIÓN IMPORTANTE:
+- Este enlace es personal e intransferible
+- Válido por 30 días desde su emisión
+- Solo usted puede acceder a sus documentos
+- Los archivos deben ser PDF, JPG, PNG, DOC o DOCX (máx. 10MB)
+
+Si tiene alguna pregunta, puede enviar un mensaje desde el portal.
+
+---
+Este es un mensaje automático. Por favor, no responda a este correo.
+© ${new Date().getFullYear()} Ministerio de Educación - Guatemala
+    `;
+
+    try {
+      const result = await this.sendEmail({
+        to: employeeEmail,
+        subject,
+        htmlContent,
+        textContent,
+        category: 'employee_portal'
+      });
+
+      console.log(`✅ Email de portal enviado a ${employeeName} (${employeeEmail})`);
+      return result;
+    } catch (error) {
+      console.error(`❌ Error enviando email de portal a ${employeeEmail}:`, error);
       throw error;
     }
   }

@@ -18,6 +18,7 @@ const NotificationAutomation = lazy(() => import('./pages/NotificationAutomation
 const EmployeeManagement = lazy(() => import('./pages/EmployeeManagement'))
 const ActivityHistory = lazy(() => import('./pages/ActivityHistory'))
 const Renewals = lazy(() => import('./pages/Renewals'))
+const EmployeePortal = lazy(() => import('./pages/EmployeePortal'))
 
 // Componente de loading para lazy loading
 const PageLoader = () => (
@@ -70,6 +71,13 @@ function App() {
                   <Login />
                 </Suspense>
               </PublicRoute>
+            } />
+
+            {/* Ruta pública para el portal del empleado (sin autenticación) */}
+            <Route path="/employee-portal/:token" element={
+              <Suspense fallback={<PageLoader />}>
+                <EmployeePortal />
+              </Suspense>
             } />
 
             {/* Rutas protegidas */}
