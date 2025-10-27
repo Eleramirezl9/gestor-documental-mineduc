@@ -7,7 +7,8 @@ import {
   AlertTriangle,
   TrendingUp,
   Download,
-  Plus
+  Plus,
+  RefreshCw
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
@@ -28,7 +29,7 @@ import {
   Line
 } from 'recharts'
 import { useAuth } from '../hooks/useAuth'
-import { documentsAPI, usersAPI, workflowsAPI, reportsAPI } from '../lib/api'
+import { dashboardAPI, reportsAPI } from '../lib/api'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 
@@ -88,6 +89,12 @@ const Dashboard = () => {
   })
   const [recentDocuments, setRecentDocuments] = useState([])
   const [chartData, setChartData] = useState([])
+  const [alerts, setAlerts] = useState({
+    oldPendingDocuments: 0,
+    totalPending: 0,
+    newUsers: 0
+  })
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Memoizar pieData para evitar recalcular en cada render
   const pieData = useMemo(() => [
@@ -107,62 +114,53 @@ const Dashboard = () => {
   }, [])
 
   const loadDashboardData = async () => {
-    // Cargar gráficos inmediatamente (datos mock)
-    setChartData([
-      { name: 'Ene', documentos: 65, aprobados: 45 },
-      { name: 'Feb', documentos: 78, aprobados: 62 },
-      { name: 'Mar', documentos: 90, aprobados: 75 },
-      { name: 'Abr', documentos: 81, aprobados: 68 },
-      { name: 'May', documentos: 95, aprobados: 82 },
-      { name: 'Jun', documentos: 88, aprobados: 79 }
-    ])
+    try {
+      // Usar el nuevo endpoint consolidado de dashboard
+      const response = await dashboardAPI.getStats()
+      const data = response.data
 
-    // Cargar cada stat de forma independiente (NO bloquea UI)
-    documentsAPI.getStats()
-      .then(response => {
-        setStats(prev => ({ ...prev, documents: response.data }))
-        setLoadingStates(prev => ({ ...prev, documents: false }))
-      })
-      .catch(error => {
-        console.error('Error cargando stats de documentos:', error)
-        setStats(prev => ({ ...prev, documents: { total: 0, pending: 0, approved: 0, rejected: 0 } }))
-        setLoadingStates(prev => ({ ...prev, documents: false }))
+      // Actualizar estadísticas
+      setStats({
+        documents: data.documents,
+        users: data.users,
+        workflows: data.workflows
       })
 
-    usersAPI.getStats()
-      .then(response => {
-        setStats(prev => ({ ...prev, users: response.data }))
-        setLoadingStates(prev => ({ ...prev, users: false }))
-      })
-      .catch(error => {
-        console.error('Error cargando stats de usuarios:', error)
-        setStats(prev => ({ ...prev, users: { total: 0, active: 0, inactive: 0 } }))
-        setLoadingStates(prev => ({ ...prev, users: false }))
+      // Actualizar datos de gráficos
+      setChartData(data.chartData.monthly)
+
+      // Actualizar documentos recientes
+      setRecentDocuments(data.documents.recentDocuments || [])
+
+      // Guardar alertas en estado
+      setAlerts(data.alerts || {
+        oldPendingDocuments: 0,
+        totalPending: 0,
+        newUsers: 0
       })
 
-    workflowsAPI.getStats()
-      .then(response => {
-        setStats(prev => ({ ...prev, workflows: response.data }))
-        setLoadingStates(prev => ({ ...prev, workflows: false }))
-      })
-      .catch(error => {
-        console.error('Error cargando stats de workflows:', error)
-        setStats(prev => ({ ...prev, workflows: { total: 0, pending: 0, completed: 0 } }))
-        setLoadingStates(prev => ({ ...prev, workflows: false }))
+      // Marcar todo como cargado
+      setLoadingStates({
+        stats: false,
+        documents: false,
+        users: false,
+        workflows: false,
+        recent: false
       })
 
-    documentsAPI.getAll({ limit: 5, sort: 'created_at', order: 'desc' })
-      .then(response => {
-        setRecentDocuments(response.data.documents || [])
-        setLoadingStates(prev => ({ ...prev, recent: false }))
-      })
-      .catch(error => {
-        console.error('Error cargando documentos recientes:', error)
-        setLoadingStates(prev => ({ ...prev, recent: false }))
-      })
+    } catch (error) {
+      console.error('Error cargando datos del dashboard:', error)
+      toast.error('Error al cargar los datos del dashboard')
 
-    // Marcar como completado el loading general
-    setLoadingStates(prev => ({ ...prev, stats: false }))
+      // Marcar todo como cargado aunque haya error
+      setLoadingStates({
+        stats: false,
+        documents: false,
+        users: false,
+        workflows: false,
+        recent: false
+      })
+    }
   }
 
   const getGreeting = () => {
@@ -176,6 +174,18 @@ const Dashboard = () => {
     navigate('/documents')
   }
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await loadDashboardData()
+      toast.success('Dashboard actualizado')
+    } catch (error) {
+      toast.error('Error al actualizar el dashboard')
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
   const handleExportReport = async () => {
     try {
       toast.loading('Generando reporte...')
@@ -183,7 +193,7 @@ const Dashboard = () => {
         period: 'current_month',
         format: 'pdf'
       })
-      
+
       // Crear y descargar el archivo
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
@@ -193,7 +203,7 @@ const Dashboard = () => {
       link.click()
       link.remove()
       window.URL.revokeObjectURL(url)
-      
+
       toast.dismiss()
       toast.success('Reporte exportado exitosamente')
     } catch (error) {
@@ -239,6 +249,14 @@ const Dashboard = () => {
           </p>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
+          <Button
+            variant="outline"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Actualizar
+          </Button>
           <Button onClick={handleNewDocument}>
             <Plus className="h-4 w-4 mr-2" />
             Nuevo Documento
@@ -260,7 +278,11 @@ const Dashboard = () => {
           <CardContent>
             <div className="text-2xl font-bold">{stats.documents.total}</div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+12%</span> desde el mes pasado
+              {stats.documents.trends?.percentageChange !== undefined && (
+                <span className={stats.documents.trends.percentageChange >= 0 ? 'text-green-600' : 'text-red-600'}>
+                  {stats.documents.trends.percentageChange >= 0 ? '+' : ''}{stats.documents.trends.percentageChange}%
+                </span>
+              )} desde el mes pasado
             </p>
           </CardContent>
         </Card>
@@ -286,7 +308,13 @@ const Dashboard = () => {
           <CardContent>
             <div className="text-2xl font-bold">{stats.documents.approved}</div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+8%</span> esta semana
+              {stats.documents.trends?.thisWeekApproved !== undefined && (
+                <>
+                  <span className="text-green-600">
+                    {stats.documents.trends.thisWeekApproved}
+                  </span> esta semana
+                </>
+              )}
             </p>
           </CardContent>
         </Card>
@@ -380,41 +408,63 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <AlertTriangle className="h-5 w-5 text-yellow-500 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium">
-                    {stats.documents.pending} documentos pendientes de revisión
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Algunos documentos llevan más de 3 días sin revisar
-                  </p>
+              {alerts.totalPending > 0 && (
+                <div className="flex items-start space-x-3">
+                  <AlertTriangle className="h-5 w-5 text-yellow-500 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">
+                      {alerts.totalPending} documentos pendientes de revisión
+                    </p>
+                    {alerts.oldPendingDocuments > 0 && (
+                      <p className="text-xs text-gray-500">
+                        {alerts.oldPendingDocuments} {alerts.oldPendingDocuments === 1 ? 'lleva' : 'llevan'} más de 3 días sin revisar
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <TrendingUp className="h-5 w-5 text-green-500 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium">
-                    Incremento en la actividad del sistema
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    +25% más documentos procesados esta semana
-                  </p>
-                </div>
-              </div>
+              )}
 
-              <div className="flex items-start space-x-3">
-                <Users className="h-5 w-5 text-blue-500 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium">
-                    Nuevos usuarios registrados
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    3 usuarios nuevos requieren activación
-                  </p>
+              {stats.documents.trends?.percentageChange !== undefined && stats.documents.trends.percentageChange > 0 && (
+                <div className="flex items-start space-x-3">
+                  <TrendingUp className="h-5 w-5 text-green-500 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">
+                      Incremento en la actividad del sistema
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      +{stats.documents.trends.percentageChange}% más documentos que el mes pasado
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {alerts.newUsers > 0 && (
+                <div className="flex items-start space-x-3">
+                  <Users className="h-5 w-5 text-blue-500 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">
+                      Nuevos usuarios registrados
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {alerts.newUsers} {alerts.newUsers === 1 ? 'usuario nuevo' : 'usuarios nuevos'} esta semana
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {alerts.totalPending === 0 && alerts.newUsers === 0 && (
+                <div className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">
+                      Todo al día
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      No hay alertas pendientes en este momento
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -423,35 +473,62 @@ const Dashboard = () => {
       {/* Progreso de objetivos */}
       <Card>
         <CardHeader>
-          <CardTitle>Objetivos del Mes</CardTitle>
+          <CardTitle>Resumen del Sistema</CardTitle>
           <CardDescription>
-            Progreso hacia las metas establecidas para este período
+            Estado actual de los principales indicadores
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Documentos Procesados</span>
-                <span className="text-sm text-gray-500">85/100</span>
+                <span className="text-sm font-medium">Tasa de Aprobación</span>
+                <span className="text-sm text-gray-500">
+                  {stats.documents.total > 0
+                    ? Math.round((stats.documents.approved / stats.documents.total) * 100)
+                    : 0}%
+                </span>
               </div>
-              <Progress value={85} className="h-2" />
+              <Progress
+                value={stats.documents.total > 0
+                  ? (stats.documents.approved / stats.documents.total) * 100
+                  : 0}
+                className="h-2"
+              />
             </div>
-            
+
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Tiempo de Respuesta</span>
-                <span className="text-sm text-gray-500">92%</span>
+                <span className="text-sm font-medium">Usuarios Activos</span>
+                <span className="text-sm text-gray-500">
+                  {stats.users.total > 0
+                    ? Math.round((stats.users.active / stats.users.total) * 100)
+                    : 0}%
+                </span>
               </div>
-              <Progress value={92} className="h-2" />
+              <Progress
+                value={stats.users.total > 0
+                  ? (stats.users.active / stats.users.total) * 100
+                  : 0}
+                className="h-2"
+              />
             </div>
-            
+
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Satisfacción de Usuarios</span>
-                <span className="text-sm text-gray-500">78%</span>
+                <span className="text-sm font-medium">Workflows Completados</span>
+                <span className="text-sm text-gray-500">
+                  {stats.workflows.total > 0
+                    ? Math.round((stats.workflows.completed / stats.workflows.total) * 100)
+                    : 0}%
+                </span>
               </div>
-              <Progress value={78} className="h-2" />
+              <Progress
+                value={stats.workflows.total > 0
+                  ? (stats.workflows.completed / stats.workflows.total) * 100
+                  : 0}
+                className="h-2"
+              />
             </div>
           </div>
         </CardContent>

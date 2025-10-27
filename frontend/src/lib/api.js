@@ -257,6 +257,16 @@ export const workflowsAPI = {
 }
 
 
+// Dashboard - Estadísticas consolidadas (SIN CACHÉ para datos en tiempo real)
+export const dashboardAPI = {
+  getStats: async () => {
+    // NO usar caché para obtener siempre datos actualizados
+    const response = await api.get('/dashboard/stats')
+    return response
+  },
+  getActivity: (params) => api.get('/dashboard/activity', { params }),
+}
+
 // Reportes
 export const reportsAPI = {
   getDocumentStats: (period) => api.get('/reports/documents', { params: { period } }),
@@ -264,13 +274,13 @@ export const reportsAPI = {
   getActivityStats: (period) => api.get('/reports/activity', { params: { period } }),
   getWorkflowStats: (period) => api.get('/reports/workflows', { params: { period } }),
   getUserActivity: (params) => api.get('/reports/user-activity', { params }),
-  exportDocuments: (params) => api.get('/reports/export/documents', { 
-    params, 
-    responseType: 'blob' 
+  exportDocuments: (params) => api.get('/reports/export/documents', {
+    params,
+    responseType: 'blob'
   }),
-  exportAudit: (params) => api.get('/reports/export/audit', { 
-    params, 
-    responseType: 'blob' 
+  exportAudit: (params) => api.get('/reports/export/audit', {
+    params,
+    responseType: 'blob'
   }),
 }
 

@@ -294,6 +294,7 @@ app.use("/api/reports", require("./routes/reports"));
 app.use("/api/audit", require("./routes/audit"));
 app.use("/api/settings", require("./routes/settings"));
 app.use("/api/employee-portal", require("./routes/employeePortal"));
+app.use("/api/dashboard", require("./routes/dashboard"));
 
 /**
  * @swagger
