@@ -3,6 +3,7 @@ import { toast } from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { supabase } from '../../lib/supabase';
 
 /**
  * Utilidad para generar PDF del folder virtual de un empleado
@@ -272,18 +273,18 @@ export const generateEmployeeFolderPDF = async (folder) => {
       );
       yPosition += 5;
       pdf.text(
-        'A continuación se muestran los detalles de cada documento:',
+        'A continuación se muestran las imágenes de los documentos aprobados:',
         margin,
         yPosition
       );
       yPosition += 15;
 
-      // Listar cada documento aprobado
+      // Procesar cada documento aprobado
       for (let i = 0; i < approvedDocs.length; i++) {
         const doc = approvedDocs[i];
 
-        // Verificar si necesitamos nueva página
-        if (yPosition > pageHeight - 60) {
+        // Verificar si necesitamos nueva página para el header
+        if (yPosition > pageHeight - 100) {
           pdf.addPage();
           yPosition = margin;
         }
@@ -298,59 +299,197 @@ export const generateEmployeeFolderPDF = async (folder) => {
         pdf.text(`${i + 1}. ${doc.document_type}`, margin + 2, yPosition);
         yPosition += 10;
 
-        pdf.setFontSize(10);
+        pdf.setFontSize(9);
         pdf.setFont('helvetica', 'normal');
         pdf.setTextColor(0, 0, 0);
 
         // Detalles del documento
         if (doc.description) {
-          pdf.setFont('helvetica', 'bold');
-          pdf.text('Descripción:', margin + 5, yPosition);
-          pdf.setFont('helvetica', 'normal');
-          const descLines = pdf.splitTextToSize(doc.description, pageWidth - 2 * margin - 30);
-          pdf.text(descLines, margin + 30, yPosition);
-          yPosition += descLines.length * 5 + 3;
+          const descLines = pdf.splitTextToSize(doc.description, pageWidth - 2 * margin - 10);
+          pdf.text(descLines, margin + 5, yPosition);
+          yPosition += descLines.length * 4 + 2;
         }
 
         if (doc.approved_at) {
           pdf.text(
-            `Fecha de aprobación: ${format(new Date(doc.approved_at), 'dd/MM/yyyy HH:mm', { locale: es })}`,
+            `Aprobado: ${format(new Date(doc.approved_at), 'dd/MM/yyyy HH:mm', { locale: es })}`,
             margin + 5,
             yPosition
           );
-          yPosition += 6;
+          yPosition += 5;
         }
 
-        if (doc.notes) {
-          pdf.setFont('helvetica', 'bold');
-          pdf.text('Notas:', margin + 5, yPosition);
-          pdf.setFont('helvetica', 'normal');
-          const notesLines = pdf.splitTextToSize(doc.notes, pageWidth - 2 * margin - 20);
-          pdf.text(notesLines, margin + 20, yPosition);
-          yPosition += notesLines.length * 5 + 3;
-        }
+        // Intentar cargar y embeber la imagen del documento
+        if (doc.documents && doc.documents.file_path) {
+          try {
+            console.log(`📄 Procesando documento: ${doc.document_type}`, {
+              file_path: doc.documents.file_path,
+              mime_type: doc.documents.mime_type
+            });
 
-        // Información del archivo adjunto
-        if (doc.documents) {
-          pdf.setFillColor(239, 246, 255); // Azul claro
-          pdf.rect(margin + 5, yPosition - 3, pageWidth - 2 * margin - 10, 15, 'F');
+            // Obtener URL pública del archivo desde Supabase Storage
+            const { data: urlData } = supabase.storage
+              .from('documents')
+              .getPublicUrl(doc.documents.file_path);
 
-          pdf.setFontSize(9);
-          pdf.setTextColor(37, 99, 235);
-          pdf.text('📎 Archivo adjunto:', margin + 8, yPosition + 2);
-          pdf.setTextColor(0, 0, 0);
-          pdf.text(doc.documents.title || 'Documento sin título', margin + 8, yPosition + 7);
+            console.log('🔗 URL obtenida:', urlData?.publicUrl);
 
-          if (doc.documents.mime_type) {
-            pdf.text(`Tipo: ${doc.documents.mime_type}`, margin + 8, yPosition + 11);
+            if (urlData && urlData.publicUrl) {
+              yPosition += 5;
+
+              // Agregar nueva página si no hay espacio
+              if (yPosition > pageHeight - 140) {
+                pdf.addPage();
+                yPosition = margin;
+              }
+
+              // Descargar la imagen como base64
+              console.log('⬇️ Descargando archivo...');
+              const response = await fetch(urlData.publicUrl);
+              const blob = await response.blob();
+              console.log('✅ Blob descargado, tamaño:', blob.size, 'tipo:', blob.type);
+
+              // Convertir blob a base64
+              const base64 = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+              });
+
+              // Determinar si es imagen - usar tanto el mime_type del DB como el del blob
+              const dbMimeType = doc.documents.mime_type || '';
+              const blobMimeType = blob.type || '';
+              const mimeType = blobMimeType || dbMimeType;
+
+              const isImage = mimeType.startsWith('image/') ||
+                             mimeType.includes('jpeg') ||
+                             mimeType.includes('jpg') ||
+                             mimeType.includes('png') ||
+                             mimeType.includes('gif') ||
+                             mimeType.includes('webp');
+
+              console.log('🖼️ ¿Es imagen?', isImage, 'MimeType:', mimeType);
+
+              if (isImage) {
+                console.log('✅ Detectado como imagen, procesando...');
+
+                // Calcular dimensiones manteniendo aspecto ratio
+                const maxWidth = pageWidth - 2 * margin - 10;
+                const maxHeight = 120;
+
+                // Crear una imagen temporal para obtener dimensiones originales
+                const img = new Image();
+                img.crossOrigin = 'anonymous'; // Para evitar problemas de CORS
+                img.src = base64;
+
+                await new Promise((resolve) => {
+                  img.onload = () => {
+                    console.log('🖼️ Imagen cargada, dimensiones originales:', img.width, 'x', img.height);
+
+                    let width = img.width;
+                    let height = img.height;
+                    const ratio = width / height;
+
+                    // Ajustar dimensiones
+                    if (width > maxWidth) {
+                      width = maxWidth;
+                      height = width / ratio;
+                    }
+                    if (height > maxHeight) {
+                      height = maxHeight;
+                      width = height * ratio;
+                    }
+
+                    console.log('📐 Dimensiones ajustadas:', width, 'x', height);
+
+                    // Verificar espacio para imagen
+                    if (yPosition + height > pageHeight - margin) {
+                      console.log('📄 Nueva página necesaria para la imagen');
+                      pdf.addPage();
+                      yPosition = margin;
+                    }
+
+                    try {
+                      // Determinar formato de imagen
+                      let format = 'JPEG';
+                      if (mimeType.includes('png')) format = 'PNG';
+                      else if (mimeType.includes('gif')) format = 'GIF';
+                      else if (mimeType.includes('webp')) format = 'WEBP';
+
+                      console.log('➕ Agregando imagen al PDF en formato:', format);
+
+                      // Agregar imagen al PDF
+                      pdf.addImage(
+                        base64,
+                        format,
+                        margin + 5,
+                        yPosition,
+                        width,
+                        height
+                      );
+
+                      console.log('✅ Imagen agregada exitosamente al PDF');
+                      yPosition += height + 5;
+                    } catch (imgError) {
+                      console.error('❌ Error al agregar imagen al PDF:', imgError);
+                      pdf.setTextColor(220, 38, 38);
+                      pdf.setFontSize(9);
+                      pdf.text('⚠ Error al procesar la imagen', margin + 5, yPosition);
+                      yPosition += 10;
+                    }
+
+                    resolve();
+                  };
+
+                  img.onerror = (error) => {
+                    // Si falla cargar la imagen, solo mostrar texto
+                    console.error('❌ Error al cargar imagen en navegador:', error);
+                    pdf.setTextColor(220, 38, 38);
+                    pdf.setFontSize(9);
+                    pdf.text('⚠ No se pudo cargar la imagen del documento', margin + 5, yPosition);
+                    yPosition += 10;
+                    resolve();
+                  };
+                });
+              } else if (mimeType.includes('pdf') || mimeType === 'application/pdf') {
+                console.log('📄 Es un PDF, mostrando indicador');
+                // Para PDFs, mostrar indicador mejorado
+                pdf.setFillColor(239, 246, 255);
+                pdf.rect(margin + 5, yPosition, pageWidth - 2 * margin - 10, 25, 'F');
+                pdf.setTextColor(37, 99, 235);
+                pdf.setFontSize(10);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('📄 Documento PDF Adjunto', margin + 10, yPosition + 8);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(8);
+                pdf.setTextColor(100, 100, 100);
+                pdf.text('Archivo: ' + (doc.documents.title || 'Sin título'), margin + 10, yPosition + 14);
+                pdf.text('Nota: Los archivos PDF no se pueden embeber dentro de este reporte PDF.', margin + 10, yPosition + 19);
+                yPosition += 30;
+              } else {
+                // Otros tipos de archivo
+                pdf.setFillColor(245, 245, 245);
+                pdf.rect(margin + 5, yPosition, pageWidth - 2 * margin - 10, 15, 'F');
+                pdf.setTextColor(100, 100, 100);
+                pdf.setFontSize(9);
+                pdf.text(`📎 Archivo: ${doc.documents.title || 'Sin título'}`, margin + 10, yPosition + 7);
+                pdf.text(`Tipo: ${mimeType}`, margin + 10, yPosition + 11);
+                yPosition += 18;
+              }
+            }
+          } catch (error) {
+            console.error('Error al cargar documento:', error);
+            pdf.setTextColor(220, 38, 38);
+            pdf.setFontSize(8);
+            pdf.text('⚠ Error al cargar el documento', margin + 5, yPosition);
+            yPosition += 10;
           }
-
-          yPosition += 20;
         }
 
+        // Línea separadora
         pdf.setDrawColor(200, 200, 200);
         pdf.line(margin, yPosition, pageWidth - margin, yPosition);
-        yPosition += 10;
+        yPosition += 15;
       }
     } else {
       // Sin documentos aprobados
