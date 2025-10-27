@@ -691,64 +691,94 @@ router.post('/employee/:id/requirements', verifyToken, [
  */
 router.get('/stats', verifyToken, async (req, res) => {
   try {
-    // Obtener estadísticas básicas
-    const [employeesResult, expiringResult] = await Promise.all([
-      employeeDocumentService.getEmployeesWithDocumentStatus({ limit: 1000 }),
-      employeeDocumentService.getExpiringDocuments(30)
-    ]);
+    // Obtener conteo directo de documentos requeridos por status desde la BD
+    const { data: requirementStats, error: reqError } = await supabaseAdmin
+      .from('employee_document_requirements')
+      .select('status', { count: 'exact' });
 
-    if (!employeesResult.success || !expiringResult.success) {
-      throw new Error('Error obteniendo datos para estadísticas');
+    if (reqError) {
+      console.error('Error obteniendo stats de requirements:', reqError);
+      throw reqError;
     }
 
-    const employees = employeesResult.employees;
-    const expiringDocs = expiringResult.documents;
-
-    // Calcular estadísticas
-    const stats = {
-      employees: {
-        total: employees.length,
-        by_status: {
-          critical: employees.filter(e => e.overall_status === 'critical').length,
-          attention: employees.filter(e => e.overall_status === 'attention').length,
-          normal: employees.filter(e => e.overall_status === 'normal').length,
-          complete: employees.filter(e => e.overall_status === 'complete').length
-        },
-        by_department: {}
-      },
-      documents: {
-        expiring_soon: expiringDocs.length,
-        by_urgency: expiringResult.summary || {
-          urgent: 0,
-          high: 0,
-          medium: 0,
-          low: 0
-        }
-      },
-      requirements: {
-        total: employees.reduce((sum, e) => sum + (e.requirement_status?.total || 0), 0),
-        pending: employees.reduce((sum, e) => sum + (e.requirement_status?.pending || 0), 0),
-        overdue: employees.reduce((sum, e) => sum + (e.requirement_status?.overdue || 0), 0),
-        completed: employees.reduce((sum, e) => sum + (e.requirement_status?.completed || 0), 0)
-      }
+    // Contar por status
+    const statusCounts = {
+      pending: 0,
+      submitted: 0,
+      approved: 0,
+      rejected: 0,
+      expired: 0
     };
 
-    // Agrupar por departamento
-    employees.forEach(emp => {
-      if (emp.department) {
-        if (!stats.employees.by_department[emp.department]) {
-          stats.employees.by_department[emp.department] = {
-            total: 0,
-            critical: 0,
-            attention: 0,
-            normal: 0,
-            complete: 0
-          };
-        }
-        stats.employees.by_department[emp.department].total++;
-        stats.employees.by_department[emp.department][emp.overall_status]++;
+    requirementStats.forEach(req => {
+      if (statusCounts.hasOwnProperty(req.status)) {
+        statusCounts[req.status]++;
       }
     });
+
+    // Obtener total de empleados activos
+    const { count: employeeCount, error: empError } = await supabaseAdmin
+      .from('employees')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true);
+
+    if (empError) {
+      console.error('Error obteniendo conteo de empleados:', empError);
+      throw empError;
+    }
+
+    // Obtener estadísticas por departamento
+    const { data: deptStats, error: deptError } = await supabaseAdmin
+      .from('employees')
+      .select('department', { count: 'exact' })
+      .eq('is_active', true);
+
+    if (deptError) {
+      console.error('Error obteniendo stats por departamento:', deptError);
+      throw deptError;
+    }
+
+    const departmentCounts = {};
+    deptStats.forEach(emp => {
+      if (emp.department) {
+        departmentCounts[emp.department] = (departmentCounts[emp.department] || 0) + 1;
+      }
+    });
+
+    // Obtener documentos por vencer (próximos 30 días)
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+    const { count: expiringCount, error: expError } = await supabaseAdmin
+      .from('employee_document_requirements')
+      .select('*', { count: 'exact', head: true })
+      .lte('required_date', thirtyDaysFromNow.toISOString().split('T')[0])
+      .in('status', ['pending', 'submitted']);
+
+    if (expError) {
+      console.error('Error obteniendo documentos por vencer:', expError);
+    }
+
+    // Calcular total de documentos
+    const totalDocuments = Object.values(statusCounts).reduce((sum, count) => sum + count, 0);
+
+    const stats = {
+      employees: {
+        total: employeeCount || 0,
+        active: employeeCount || 0,
+        by_department: departmentCounts
+      },
+      documents: {
+        total: totalDocuments,
+        by_status: statusCounts,
+        pending: statusCounts.pending,
+        submitted: statusCounts.submitted,
+        approved: statusCounts.approved,
+        rejected: statusCounts.rejected,
+        expired: statusCounts.expired,
+        expiring_soon: expiringCount || 0
+      }
+    };
 
     res.json({
       success: true,
@@ -758,7 +788,123 @@ router.get('/stats', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('Error en GET /employee-documents/stats:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/employee-documents/virtual-folders:
+ *   get:
+ *     summary: Obtener datos de folders virtuales para todos los empleados
+ *     tags: [Employee Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Folders virtuales obtenidos exitosamente
+ */
+router.get('/virtual-folders', verifyToken, async (req, res) => {
+  try {
+    // Obtener todos los empleados activos
+    const { data: employees, error: empError } = await supabaseAdmin
+      .from('employees')
+      .select('id, employee_id, first_name, last_name, email, department, position')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (empError) {
+      console.error('Error obteniendo empleados:', empError);
+      throw empError;
+    }
+
+    // Para cada empleado, obtener sus documentos requeridos con detalles
+    const foldersPromises = employees.map(async (employee) => {
+      const { data: requirements, error: reqError } = await supabaseAdmin
+        .from('employee_document_requirements')
+        .select(`
+          id,
+          document_type,
+          description,
+          status,
+          priority,
+          required_date,
+          submitted_at,
+          approved_at,
+          rejected_at,
+          rejection_reason,
+          notes,
+          document_id,
+          documents (
+            id,
+            title,
+            file_path,
+            file_size,
+            mime_type,
+            created_at
+          )
+        `)
+        .eq('employee_id', employee.id)
+        .order('created_at', { ascending: false });
+
+      if (reqError) {
+        console.error(`Error obteniendo requirements para empleado ${employee.employee_id}:`, reqError);
+        return null;
+      }
+
+      // Contar documentos por status
+      const docStats = {
+        total: requirements.length,
+        pending: requirements.filter(r => r.status === 'pending').length,
+        submitted: requirements.filter(r => r.status === 'submitted').length,
+        approved: requirements.filter(r => r.status === 'approved').length,
+        rejected: requirements.filter(r => r.status === 'rejected').length,
+        expired: requirements.filter(r => r.status === 'expired').length
+      };
+
+      // Calcular tamaño total de documentos aprobados
+      const approvedDocs = requirements.filter(r => r.status === 'approved' && r.documents);
+      const totalSize = approvedDocs.reduce((sum, req) => {
+        return sum + (req.documents?.file_size || 0);
+      }, 0);
+
+      return {
+        employee: {
+          id: employee.id,
+          employee_id: employee.employee_id,
+          full_name: `${employee.first_name} ${employee.last_name}`,
+          first_name: employee.first_name,
+          last_name: employee.last_name,
+          email: employee.email,
+          department: employee.department,
+          position: employee.position
+        },
+        documents: requirements,
+        stats: docStats,
+        total_size: totalSize,
+        has_approved_documents: docStats.approved > 0
+      };
+    });
+
+    const folders = await Promise.all(foldersPromises);
+    const validFolders = folders.filter(f => f !== null);
+
+    res.json({
+      success: true,
+      folders: validFolders,
+      total_employees: validFolders.length,
+      generated_at: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Error en GET /employee-documents/virtual-folders:', error);
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 

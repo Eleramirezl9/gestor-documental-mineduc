@@ -363,6 +363,9 @@ export const employeesAPI = {
   // Obtener estadísticas
   getStats: () => api.get('/employee-documents/stats'),
 
+  // Obtener folders virtuales para todos los empleados
+  getVirtualFolders: () => api.get('/employee-documents/virtual-folders'),
+
   // Obtener documentos por vencer
   getExpiringDocuments: (days) => api.get(`/employee-documents/expiring?days=${days || 30}`),
 

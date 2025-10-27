@@ -5,6 +5,7 @@ import { useEmployeeRealtimeUpdates } from '../hooks/useEmployeeRealtimeUpdates'
 import { toast } from 'react-hot-toast';
 import api, { employeesAPI } from '../lib/api';
 import EmployeeReportSimple from '../components/reports/EmployeeReportSimple';
+import EmployeeReports from './EmployeeReports';
 import useCanvasPDFGenerator from '../hooks/useCanvasPDFGenerator';
 import usePDFGenerator from '../hooks/usePDFGenerator';
 import DocumentAssignmentModal from '../components/employees/DocumentAssignmentModal';
@@ -62,7 +63,8 @@ import {
   Check,
   MessageSquare,
   Trash2,
-  Edit
+  Edit,
+  BarChart3
 } from 'lucide-react';
 
 const EmployeeManagement = () => {
@@ -2100,7 +2102,7 @@ const EmployeeManagement = () => {
       </div>
 
       <Tabs defaultValue="employees" className="space-y-6">
-        <TabsList>
+        <TabsList className="bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]">
           <TabsTrigger value="employees">
             <Users className="h-4 w-4 mr-2" />
             Empleados
@@ -2108,6 +2110,10 @@ const EmployeeManagement = () => {
           <TabsTrigger value="register">
             <Plus className="h-4 w-4 mr-2" />
             Registrar
+          </TabsTrigger>
+          <TabsTrigger value="reports">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Reportes
           </TabsTrigger>
         </TabsList>
 
@@ -2458,6 +2464,10 @@ const EmployeeManagement = () => {
               </form>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="reports">
+          <EmployeeReports />
         </TabsContent>
       </Tabs>
 
