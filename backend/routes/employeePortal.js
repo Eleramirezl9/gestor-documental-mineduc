@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
+const { v4: uuidv4 } = require('uuid');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -240,7 +241,6 @@ router.post('/:token/upload', upload.single('file'), async (req, res) => {
 
     // Upload to Supabase Storage using storageService format
     // Format: empleados/{employeeCode}_{employeeUUID}/{fileUUID}.ext
-    const { v4: uuidv4 } = require('uuid');
     const fileExt = path.extname(req.file.originalname).substring(1); // Remove leading dot
     const uniqueFileName = `${uuidv4()}.${fileExt}`;
     const folderIdentifier = `${employeeInfo.employee_id}_${employeeId}`;
