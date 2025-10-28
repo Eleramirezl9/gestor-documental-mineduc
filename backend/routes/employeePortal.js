@@ -257,35 +257,62 @@ router.post('/:token/upload', upload.single('file'), async (req, res) => {
 
     console.log('✅ Archivo subido exitosamente a:', filePath);
 
-    // Create document record in employee_documents table
-    // Note: uploaded_by is intentionally omitted for employee portal uploads
-    // since employees are not auth.users - they access via token
-    const insertData = {
-      employee_id: employeeInfo.employee_id, // Use the employee code, not UUID
+    // IMPORTANTE: Crear el documento en la tabla 'documents' (sistema principal)
+    // Esto permite que el documento sea visible en los reportes y folder virtual
+    const documentData = {
+      title: documentType || req.file.originalname,
+      description: `Documento subido por empleado vía portal - ${employeeName}`,
       file_name: req.file.originalname,
-      file_path: filePath, // Store relative path, not publicUrl
+      file_path: filePath,
+      file_size: req.file.size,
+      file_type: path.extname(req.file.originalname).substring(1).toUpperCase(),
+      mime_type: req.file.mimetype,
+      status: 'pending', // Estado inicial: pendiente de aprobación
+      is_public: false,
+      uploaded_by: null // Empleado no autenticado como usuario del sistema
+    };
+
+    console.log('📝 Creando documento en tabla "documents" (sistema principal)...');
+
+    const { data: mainDocument, error: mainDocError } = await supabase
+      .from('documents')
+      .insert(documentData)
+      .select()
+      .single();
+
+    if (mainDocError) {
+      console.error('❌ Error creating main document:', mainDocError);
+      throw mainDocError;
+    }
+
+    console.log('✅ Documento principal creado con ID:', mainDocument.id);
+
+    // OPCIONAL: También crear en employee_documents para compatibilidad con sistema antiguo
+    const legacyData = {
+      employee_id: employeeInfo.employee_id,
+      file_name: req.file.originalname,
+      file_path: filePath,
       file_size: req.file.size,
       mime_type: req.file.mimetype,
       document_type_id: documentTypeId,
       requirement_id: requestId || null,
       status: 'pendiente'
-      // uploaded_by is NULL - employee uploads via token, not authenticated as user
     };
 
-    console.log('📝 Insertando documento en employee_documents:', JSON.stringify(insertData, null, 2));
-
-    const { data: document, error: docError } = await supabase
+    const { data: legacyDocument, error: legacyError} = await supabase
       .from('employee_documents')
-      .insert(insertData)
+      .insert(legacyData)
       .select()
       .single();
 
-    if (docError) {
-      console.error('❌ Error creating document record:', docError);
-      throw docError;
+    if (legacyError) {
+      console.log('⚠️ No se pudo crear en employee_documents (legacy):', legacyError.message);
+    } else {
+      console.log('✅ Documento legacy creado con ID:', legacyDocument.id);
     }
 
-    console.log('✅ Documento creado en BD:', document.id, 'requirement_id:', document.requirement_id);
+    // Usar el ID del documento principal para las referencias
+    const document = mainDocument;
 
     // If this is responding to a request, update it
     if (requestId) {

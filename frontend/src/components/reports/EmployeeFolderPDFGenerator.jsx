@@ -1,9 +1,58 @@
-import React from 'react';
 import { toast } from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { supabase } from '../../lib/supabase';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configurar el worker de PDF.js desde la carpeta public
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+/**
+ * Convierte las páginas de un PDF a imágenes base64
+ * @param {Uint8Array} pdfData - Datos del PDF
+ * @param {number} scale - Escala de renderizado (por defecto 2 para buena calidad)
+ * @returns {Promise<string[]>} Array de imágenes en base64
+ */
+const convertPdfPagesToImages = async (pdfData, scale = 2) => {
+  try {
+    console.log('📄 Cargando PDF con PDF.js...');
+    const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+    const pdf = await loadingTask.promise;
+    const numPages = pdf.numPages;
+    console.log(`📄 PDF tiene ${numPages} página(s)`);
+
+    const images = [];
+
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      console.log(`🖼️ Renderizando página ${pageNum}/${numPages}...`);
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale });
+
+      // Crear canvas
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      // Renderizar página en el canvas
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise;
+
+      // Convertir canvas a base64
+      const imageData = canvas.toDataURL('image/jpeg', 0.95);
+      images.push(imageData);
+      console.log(`✅ Página ${pageNum} renderizada`);
+    }
+
+    return images;
+  } catch (error) {
+    console.error('❌ Error al convertir PDF a imágenes:', error);
+    throw error;
+  }
+};
 
 /**
  * Utilidad para generar PDF del folder virtual de un empleado
@@ -251,7 +300,20 @@ export const generateEmployeeFolderPDF = async (folder) => {
     yPosition += 10;
 
     // ======== PÁGINAS ADICIONALES: DOCUMENTOS APROBADOS ========
+    // Debug: Ver todos los documentos aprobados
+    const allApprovedDocs = documents.filter(d => d.status === 'approved');
+    console.log('📊 Total de documentos aprobados:', allApprovedDocs.length);
+    allApprovedDocs.forEach((doc, index) => {
+      console.log(`📄 Doc ${index + 1}:`, {
+        type: doc.document_type,
+        hasDocuments: !!doc.documents,
+        documentId: doc.document_id,
+        documents: doc.documents
+      });
+    });
+
     const approvedDocs = documents.filter(d => d.status === 'approved' && d.documents);
+    console.log('✅ Documentos aprobados CON archivo adjunto:', approvedDocs.length);
 
     if (approvedDocs.length > 0) {
       pdf.addPage();
@@ -452,20 +514,104 @@ export const generateEmployeeFolderPDF = async (folder) => {
                   };
                 });
               } else if (mimeType.includes('pdf') || mimeType === 'application/pdf') {
-                console.log('📄 Es un PDF, mostrando indicador');
-                // Para PDFs, mostrar indicador mejorado
-                pdf.setFillColor(239, 246, 255);
-                pdf.rect(margin + 5, yPosition, pageWidth - 2 * margin - 10, 25, 'F');
-                pdf.setTextColor(37, 99, 235);
-                pdf.setFontSize(10);
-                pdf.setFont('helvetica', 'bold');
-                pdf.text('📄 Documento PDF Adjunto', margin + 10, yPosition + 8);
-                pdf.setFont('helvetica', 'normal');
-                pdf.setFontSize(8);
-                pdf.setTextColor(100, 100, 100);
-                pdf.text('Archivo: ' + (doc.documents.title || 'Sin título'), margin + 10, yPosition + 14);
-                pdf.text('Nota: Los archivos PDF no se pueden embeber dentro de este reporte PDF.', margin + 10, yPosition + 19);
-                yPosition += 30;
+                console.log('📄 Es un PDF, convirtiendo a imágenes...');
+
+                try {
+                  // Convertir el blob a ArrayBuffer
+                  const arrayBuffer = await blob.arrayBuffer();
+                  const pdfData = new Uint8Array(arrayBuffer);
+
+                  // Convertir páginas del PDF a imágenes
+                  const pdfImages = await convertPdfPagesToImages(pdfData, 1.5);
+
+                  console.log(`✅ PDF convertido a ${pdfImages.length} imagen(es)`);
+
+                  // Agregar cada página como imagen
+                  for (let pageIndex = 0; pageIndex < pdfImages.length; pageIndex++) {
+                    const pageImage = pdfImages[pageIndex];
+
+                    // Agregar encabezado de página si hay múltiples páginas
+                    if (pdfImages.length > 1) {
+                      yPosition += 5;
+                      pdf.setFontSize(9);
+                      pdf.setFont('helvetica', 'italic');
+                      pdf.setTextColor(100, 100, 100);
+                      pdf.text(`Página ${pageIndex + 1} de ${pdfImages.length}`, margin + 5, yPosition);
+                      yPosition += 5;
+                    }
+
+                    // Crear imagen temporal para obtener dimensiones
+                    const img = new Image();
+                    img.src = pageImage;
+
+                    await new Promise((resolve) => {
+                      img.onload = () => {
+                        const maxWidth = pageWidth - 2 * margin - 10;
+                        const maxHeight = 240; // Aumentado de 160 a 240 para mejor visualización
+
+                        let width = img.width;
+                        let height = img.height;
+                        const ratio = width / height;
+
+                        // Ajustar dimensiones
+                        if (width > maxWidth) {
+                          width = maxWidth;
+                          height = width / ratio;
+                        }
+                        if (height > maxHeight) {
+                          height = maxHeight;
+                          width = height * ratio;
+                        }
+
+                        // Verificar si necesitamos nueva página
+                        if (yPosition + height > pageHeight - margin) {
+                          pdf.addPage();
+                          yPosition = margin;
+                        }
+
+                        try {
+                          // Agregar imagen al PDF
+                          pdf.addImage(
+                            pageImage,
+                            'JPEG',
+                            margin + 5,
+                            yPosition,
+                            width,
+                            height
+                          );
+
+                          yPosition += height + 5;
+                          console.log(`✅ Página ${pageIndex + 1} agregada al PDF`);
+                        } catch (imgError) {
+                          console.error('❌ Error al agregar imagen:', imgError);
+                        }
+
+                        resolve();
+                      };
+
+                      img.onerror = () => {
+                        console.error('❌ Error al cargar página del PDF');
+                        resolve();
+                      };
+                    });
+                  }
+
+                } catch (pdfError) {
+                  console.error('❌ Error al procesar PDF:', pdfError);
+                  // Si falla, mostrar indicador
+                  pdf.setFillColor(239, 246, 255);
+                  pdf.rect(margin + 5, yPosition, pageWidth - 2 * margin - 10, 25, 'F');
+                  pdf.setTextColor(37, 99, 235);
+                  pdf.setFontSize(10);
+                  pdf.setFont('helvetica', 'bold');
+                  pdf.text('📄 Documento PDF Adjunto', margin + 10, yPosition + 8);
+                  pdf.setFont('helvetica', 'normal');
+                  pdf.setFontSize(8);
+                  pdf.setTextColor(100, 100, 100);
+                  pdf.text('Archivo: ' + (doc.documents.title || 'Sin título'), margin + 10, yPosition + 14);
+                  pdf.text('Nota: No se pudo renderizar el PDF.', margin + 10, yPosition + 19);
+                  yPosition += 30;
+                }
               } else {
                 // Otros tipos de archivo
                 pdf.setFillColor(245, 245, 245);

@@ -4,7 +4,6 @@ import {
   FileText,
   Users,
   Settings,
-  BarChart3,
   Bell,
   Search,
   Menu,
@@ -48,7 +47,6 @@ const Layout = () => {
     { name: 'Historial de Actividad', href: '/activity-history', icon: Activity },
     { name: 'Notificaciones', href: '/notifications', icon: Bell },
     { name: 'Automatización', href: '/automation', icon: Bot, adminOnly: true },
-    { name: 'Reportes', href: '/reports', icon: BarChart3 },
     { name: 'Auditoría', href: '/audit', icon: Shield },
     { name: 'Configuración', href: '/settings', icon: Settings },
   ]

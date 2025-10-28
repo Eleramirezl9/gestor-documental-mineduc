@@ -71,6 +71,10 @@ export default defineConfig({
       'recharts',
       'lucide-react',
       'react-hot-toast'
-    ]
+    ],
+    exclude: ['pdfjs-dist']
+  },
+  worker: {
+    format: 'es'
   }
 })
