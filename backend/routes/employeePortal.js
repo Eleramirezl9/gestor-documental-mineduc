@@ -259,6 +259,23 @@ router.post('/:token/upload', upload.single('file'), async (req, res) => {
 
     // IMPORTANTE: Crear el documento en la tabla 'documents' (sistema principal)
     // Esto permite que el documento sea visible en los reportes y folder virtual
+    // Nota: Los empleados suben documentos pero no están en auth.users,
+    // por lo que necesitamos un usuario del sistema para created_by
+
+    // Obtener el primer usuario admin del sistema para usar como created_by
+    const { data: adminUser, error: adminError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('role', 'admin')
+      .eq('is_active', true)
+      .limit(1)
+      .single();
+
+    if (adminError || !adminUser) {
+      console.error('❌ No se encontró usuario admin activo en el sistema');
+      throw new Error('No se encontró usuario administrador para procesar el documento. Contacte al administrador del sistema.');
+    }
+
     const documentData = {
       title: documentType || req.file.originalname,
       description: `Documento subido por empleado vía portal - ${employeeName}`,
@@ -269,7 +286,7 @@ router.post('/:token/upload', upload.single('file'), async (req, res) => {
       mime_type: req.file.mimetype,
       status: 'pending', // Estado inicial: pendiente de aprobación
       is_public: false,
-      uploaded_by: null // Empleado no autenticado como usuario del sistema
+      created_by: adminUser.id // Usuario admin como creador (requerido por schema)
     };
 
     console.log('📝 Creando documento en tabla "documents" (sistema principal)...');
@@ -354,8 +371,17 @@ router.post('/:token/upload', upload.single('file'), async (req, res) => {
       data: document
     });
   } catch (error) {
-    console.error('Error uploading document:', error);
-    res.status(500).json({ success: false, message: 'Error al subir documento' });
+    console.error('❌ Error uploading document:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code
+    });
+    res.status(500).json({
+      success: false,
+      message: 'Error al subir documento',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
